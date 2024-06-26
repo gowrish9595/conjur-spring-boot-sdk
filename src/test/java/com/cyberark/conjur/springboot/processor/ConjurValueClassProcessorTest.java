@@ -1,6 +1,9 @@
 package com.cyberark.conjur.springboot.processor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.argThat;
+
+import java.util.Arrays;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +64,11 @@ class ConjurValueClassProcessorTest {
 		// Ensure that the ConjurRetrieveSecretService is properly mocked if necessary
 		Mockito.when(conjurRetrieveSecretService.retriveSingleSecretForCustomAnnotation(Mockito.anyString()))
 				.thenReturn("test-secret".getBytes());
+		
+		// Ensure that the ConjurRetrieveSecretService is properly mocked if necessary
+		Mockito.when(conjurRetrieveSecretService.retriveMultipleSecretsForCustomAnnotation(argThat(array -> Arrays.asList(array).containsAll(Arrays.asList("test-username", "test-password")))))
+						.thenReturn("test-secret".getBytes());
+		
 	}
 
 	@Test

@@ -27,9 +27,9 @@ public class CustomPropertySourceChain extends PropertyProcessorChain {
 	private PropertyProcessorChain chain;
 
 	private SecretsApi secretsApi;
-	
+
 	private ConjurConfig conjurConfig;
-	
+
 	public CustomPropertySourceChain(String name) {
 		super("customPropertySource");
 		LOGGER.debug("Calling CustomPropertysource Chain ");
@@ -49,17 +49,17 @@ public class CustomPropertySourceChain extends PropertyProcessorChain {
 	public String[] getPropertyNames() {
 		return new String[0];
 	}
-	
+
 	public void setConjurConfig(ConjurConfig conjurConfig) {
 		this.conjurConfig = conjurConfig;
 	}
-	
+
 	@Override
 	public Object getProperty(String key) {
 		StringBuilder kind = new StringBuilder();
 		Gson gson = new Gson();
 		Object secretValue = null;
-		
+
 		List<Object> list = new ArrayList<Object>();
 		key = conjurConfig.mapProperty(key);
 		if (!(key.startsWith(ConjurConstant.SPRING_VAR)) && !(key.startsWith(ConjurConstant.SERVER_VAR))
@@ -77,49 +77,68 @@ public class CustomPropertySourceChain extends PropertyProcessorChain {
 				String[] keys = key.split(",");
 				String credentialId = "";
 				if (keys.length > 0) {
-					credentialId = key = conjurConfig.mapProperty(keys[0]);
-					kind.append(account + ":variable:" + credentialId); 
+					credentialId = conjurConfig.mapProperty(keys[0]);
+					kind.append(account + ":variable:" + credentialId);
 					for (int i = 1; i < keys.length; i++) {
 						credentialId = conjurConfig.mapProperty(keys[i]);
-						kind.append("," + account+ ":variable:" + keys[i]);
+						kind.append("," + account + ":variable:" + credentialId);
 					}
 				}
 				try {
 					secretValue = gson.toJson(secretsApi.getSecrets(new String(kind)), Object.class);
+					secretValue = processMultipleSecretResult(secretValue);
 				} catch (ApiException ex) {
-					LOGGER.error("Status code CustomPropery: " + ex.getCode());
-					LOGGER.error("Reason: " + ex.getResponseBody());
-					LOGGER.error(ex.getMessage());
-					if(ex.getCode() == 404 || ex.getMessage().equalsIgnoreCase("Not Found")) {
-					for (int i = 0; i < keys.length; i++) {
-						try {
-							credentialId = conjurConfig.mapProperty(keys[i]);
-							secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, credentialId);
-							if (secretValue != null) {
-								list.add(secretValue);
+					if (ex.getCode() == 404 || ex.getMessage().equalsIgnoreCase("Not Found")) {
+						for (int i = 0; i < keys.length; i++) {
+							try {
+								credentialId = conjurConfig.mapProperty(keys[i]);
+								secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, credentialId);
+								if (secretValue != null) {
+									list.add(secretValue);
+								}
+							} catch (ApiException e) {
+								LOGGER.warn("Status code CustomPropery: " + ex.getCode());
+								LOGGER.warn("Reason: " + ex.getResponseBody());
+								LOGGER.warn(ex.getMessage());
 							}
-						} catch (ApiException e) {
-							LOGGER.error("Status code CustomPropery: " + ex.getCode());
-							LOGGER.error("Reason: " + ex.getResponseBody());
-							LOGGER.error(ex.getMessage());
 						}
+						secretValue = gson.toJson(list.toArray(new Object[list.size()]), Object.class);
 					}
-					secretValue = gson.toJson(list.toArray(new Object[list.size()]), Object.class);
 				}
-			}
-			}else {
+			} else {
 				try {
 					secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, key);
 				} catch (ApiException ex) {
-					LOGGER.error("Status code: " + ex.getCode());
-					LOGGER.error("Reason: " + ex.getResponseBody());
-					LOGGER.error(ex.getMessage());
+					LOGGER.warn("Status code: " + ex.getCode());
+					LOGGER.warn("Reason: " + ex.getResponseBody());
+					LOGGER.warn(ex.getMessage());
 				}
 			}
 
 		}
 
 		return secretValue;
+	}
+
+	private String processMultipleSecretResult(Object result) {
+		String resultString = result.toString().replaceAll("^\\{|\\}$", "");
+		String[] pairs = resultString.split("\",\"");
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < pairs.length; i++) {
+			String[] parts = pairs[i].split("\":\"");
+			if (parts.length >= 2) {
+				String key = parts[0].replaceAll("^\"|\"$", "");
+				String value = parts[1].replaceAll("^\"|\"$", "");
+				String[] keyParts = key.split("/");
+				String finalKey = keyParts[keyParts.length - 1];
+				sb.append(finalKey).append("=").append(value);
+				if (i < pairs.length - 1) {
+					sb.append(",");
+				}
+			}
+		}
+		String finalResult = sb.toString();
+		return finalResult;
 	}
 
 }

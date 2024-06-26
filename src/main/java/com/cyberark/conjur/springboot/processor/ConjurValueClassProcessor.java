@@ -30,14 +30,17 @@ import com.cyberark.conjur.springboot.core.env.ConjurConfig;
 public class ConjurValueClassProcessor implements BeanPostProcessor {
 
 	private final ConjurRetrieveSecretService conjurRetrieveSecretService;
-	
+
 	private ConjurConfig conjurConfig;
+
+	private ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurValueClassProcessor.class);
 
-	public ConjurValueClassProcessor(ConjurRetrieveSecretService conjurRetrieveSecretService,ConjurConfig conjurConfig) {
+	public ConjurValueClassProcessor(ConjurRetrieveSecretService conjurRetrieveSecretService,
+			ConjurConfig conjurConfig) {
 		this.conjurRetrieveSecretService = conjurRetrieveSecretService;
-		this.conjurConfig= conjurConfig;
+		this.conjurConfig = conjurConfig;
 
 	}
 
@@ -52,89 +55,54 @@ public class ConjurValueClassProcessor implements BeanPostProcessor {
 		 * and ConjurValues annotaions for standalone
 		 */
 		List<Field> fieldList = FieldUtils.getAllFieldsList(managedBeanClass);
-		
 		for (Field field : fieldList) {
+
+			String credentialId;
+			String credentialToMap;
+			List<String> credentialsList = new ArrayList<>();
+
 			if (field.isAnnotationPresent(ConjurValue.class)) {
 				ReflectionUtils.makeAccessible(field);
-				String credentialId = field.getDeclaredAnnotation(ConjurValue.class).key();
-				String credentialToMap = conjurConfig.mapProperty(credentialId);
+				credentialId = field.getDeclaredAnnotation(ConjurValue.class).key();
+				credentialToMap = conjurConfig.mapProperty(credentialId);
 				if (StringUtils.isNotBlank(credentialToMap)) {
 					credentialId = credentialToMap;
 				}
 				byte[] result;
 				try {
 					result = conjurRetrieveSecretService.retriveSingleSecretForCustomAnnotation(credentialId);
-					try {
-						if (result != null)
-							field.set(bean, result);
-					} catch (IllegalArgumentException | IllegalAccessException e) {
-						LOGGER.error("Error setting field value " + e.getMessage());
-					}
+					setField(field, bean, result);
+
 				} catch (ApiException ex) {
-					LOGGER.error(
-							"Error fecting secrets using ConjurValue(single) custom annotation " + ex.getMessage());
-					return ex.getMessage();
+					LOGGER.warn("Data Not found for Single Retrieval for key : " + ex.getMessage());
 				}
 			} else if (field.isAnnotationPresent(ConjurValues.class)) {
-				LOGGER.info("inside else if ");
-
 				ReflectionUtils.makeAccessible(field);
 				String[] credentialsArr = field.getDeclaredAnnotation(ConjurValues.class).keys();
-				List<String> credentialsList = new ArrayList<>();
-				String credentialToMap = "";
 				for (String key : credentialsArr) {
 					credentialToMap = conjurConfig.mapProperty(key);
 					if (StringUtils.isNotBlank(credentialToMap)) {
 						credentialsList.add(credentialToMap);
 					}
 				}
-				byte[] result = null;
+				byte[] result;
 				try {
 					if (!credentialsList.isEmpty()) {
 						String[] credentialArr = credentialsList.toArray(new String[0]);
 						result = conjurRetrieveSecretService.retriveMultipleSecretsForCustomAnnotation(credentialArr);
-						try {
-							field.set(bean, result);
-						} catch (IllegalArgumentException | IllegalAccessException e) {
-							LOGGER.error("Error setting field value " + e.getMessage());
-						}
+						setField(field, bean, result);
 					}
 				} catch (ApiException ex) {
-					LOGGER.error("Error fecting secrets  using ConjurValues (bulk/multiple) custom annoation "
-							+ ex.getMessage());
 					if (ex.getCode() == 404 || ex.getMessage().equalsIgnoreCase("Not Found")) {
-						if (!credentialsList.isEmpty()) {
-							String[] credentialArr = credentialsList.toArray(new String[0]);
-							ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-							String secretVal = "";
-							if (credentialArr.length > 0) {
-								try {
-									result = conjurRetrieveSecretService
-											.retriveSingleSecretForCustomAnnotation(credentialArr[0]);
-									if (result != null) {
-										outputStream.write(result);
-									}
-									for (int i = 1; i < credentialArr.length; i++) {
-										result = conjurRetrieveSecretService
-												.retriveSingleSecretForCustomAnnotation(credentialArr[i]);
-										if (result != null) {
-											secretVal = "," + new String(result);
-											outputStream.write(secretVal.getBytes());
-										}
-									}
-								} catch (ApiException | IOException e) {
-									LOGGER.error("Error while using ConjurValues custom annoation " + ex.getMessage());
-								}
-							}
-							byte[] finalResult = outputStream.toByteArray();
+						try {
+							byte[] finalResult = retrieveSecretsForCredential(credentialsList).toByteArray();
 							if (finalResult.length > 0) {
-								try {
-									field.set(bean, finalResult);
-								} catch (IllegalArgumentException | IllegalAccessException e) {
-									LOGGER.error("Error while adding result for ConjurValues custom annoation "
-											+ ex.getMessage());
-								}
+								setField(field, bean, finalResult);
+
 							}
+							outputStream.close();
+						} catch (IOException ioe) {
+							LOGGER.error("Error while closing  ConjurValues outputStream " + ioe.getMessage());
 						}
 					}
 				}
@@ -144,9 +112,63 @@ public class ConjurValueClassProcessor implements BeanPostProcessor {
 		return bean;
 	}
 
+	@Override
 	@Nullable
 	public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
 		return bean;
 	}
-	
+
+	private void setField(Field field, Object bean, byte[] finalResult) {
+		try {
+			if (finalResult != null)
+				field.set(bean, finalResult);
+		} catch (IllegalArgumentException | IllegalAccessException e) {
+			LOGGER.error("Error setting field value " + e.getMessage());
+		}
+	}
+
+	private ByteArrayOutputStream retrieveSecretsForCredential(List<String> credentialsList) {
+		byte[] result;
+		if (!credentialsList.isEmpty()) {
+			String secretVal = "";
+			boolean firstValue = false;
+			String keyValuePair;
+			int counter = 0;
+			try {
+				for (String value : credentialsList) {
+					result = conjurRetrieveSecretService.retriveSingleSecretForCustomAnnotation(value);
+					String[] tmp2 = value.split("/");
+					String key = tmp2[tmp2.length - 1];
+
+					if (result != null) {
+						if (!firstValue && !(outputStream.size() > 0)) {
+							keyValuePair = key + "=" + new String(result);
+							outputStream.write(keyValuePair.getBytes());
+							firstValue = true;
+						} else {
+							secretVal = "," + key + "=" + new String(result);
+							outputStream.write(secretVal.getBytes());
+						}
+
+					}
+					counter++;
+				}
+
+			} catch (ApiException ae) {
+				LOGGER.warn("Data Not found for Multiple/Bulk Retrieval for key(s)" + ae.getMessage());
+				List<String> processList = new ArrayList<>();
+				processList = credentialsList.subList(counter + 1, credentialsList.size());
+				retrieveSecretsForCredential(processList);
+			} catch (IOException ioe) {
+				LOGGER.error("Error while processing ConjurValues outputStream " + ioe.getMessage());
+				try {
+					outputStream.close();
+				} catch (IOException e) {
+					LOGGER.error("Error while closing  ConjurValues outputStream " + e.getMessage());
+				}
+			}
+		}
+		return outputStream;
+	}
+
 }
