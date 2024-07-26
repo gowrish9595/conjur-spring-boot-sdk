@@ -4,16 +4,16 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.cyberark.conjur.sdk.ApiException;
-import com.cyberark.conjur.sdk.endpoint.SecretsApi;
-import com.cyberark.conjur.springboot.constant.ConjurConstant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.util.ClassUtils;
+
+import com.cyberark.conjur.sdk.ApiException;
+import com.cyberark.conjur.sdk.endpoint.SecretsApi;
+import com.cyberark.conjur.springboot.constant.ConjurConstant;
 
 /**
  * 
@@ -30,7 +30,7 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 	private SecretsApi secretsApi;
 
 	private List<String> properties;
-	
+
 	private ConjurConfig conjurConfig;
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurPropertySource.class);
@@ -71,7 +71,7 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 	@Override
 	public Object getProperty(String key) {
 		byte[] result = null;
-		if(!vaultPath.endsWith("/")) {
+		if (!vaultPath.endsWith("/")) {
 			this.vaultPath = vaultPath.concat("/");
 		}
 		if (propertyExists(key)) {
@@ -80,7 +80,9 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 				String account = ConjurConnectionManager.getAccount(secretsApi);
 				String secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, vaultPath + key);
 				result = secretValue != null ? secretValue.getBytes() : null;
+				
 			} catch (ApiException ae) {
+
 				LOGGER.warn("Failed to get property from Conjur for: " + key);
 				LOGGER.warn("Reason: " + ae.getResponseBody());
 				LOGGER.warn(ae.getMessage());
@@ -91,6 +93,7 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 
 	/**
 	 * To set the secert api value
+	 * 
 	 * @param secretsApi
 	 */
 	public void setSecretsApi(SecretsApi secretsApi) {
@@ -100,7 +103,7 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 	private boolean propertyExists(String key) {
 		return properties.stream().anyMatch(property -> property.contains(key));
 	}
-	
+
 	public void setConjurConfig(ConjurConfig conjurConfig) {
 		this.conjurConfig = conjurConfig;
 	}

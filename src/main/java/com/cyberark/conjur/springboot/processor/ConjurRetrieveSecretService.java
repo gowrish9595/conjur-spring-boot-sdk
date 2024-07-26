@@ -1,7 +1,5 @@
 package com.cyberark.conjur.springboot.processor;
 
-import java.util.HashMap;
-import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +37,8 @@ public class ConjurRetrieveSecretService {
 		}
 		try {
 			result = secretsApi.getSecrets(new String(kind));
-		} catch (ApiException e) {
-			LOGGER.error("Status code: " + e.getCode());
-			LOGGER.error("Reason: " + e.getResponseBody());
-			LOGGER.error(e.getMessage());
-			throw new ApiException(e.getCode(), e.getMessage());
+		} catch (ApiException ae) {
+			throw new ApiException(ae.getCode(), ae.getMessage(), null, ae.getResponseBody());
 
 		}
 		return processMultipleSecretResult(result);
@@ -62,28 +57,31 @@ public class ConjurRetrieveSecretService {
 			String account = ConjurConnectionManager.getAccount(secretsApi);
 			String secret = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, key);
 			result = secret != null ? secret.getBytes() : null;
-		} catch (ApiException e) {
-			LOGGER.error("Status code: " + e.getCode());
-			LOGGER.error("Reason: " + e.getResponseBody());
-			LOGGER.error(e.getMessage());
-			throw new ApiException(e.getCode(), e.getMessage());
+		} catch (ApiException ae) {
+			throw new ApiException(ae.getCode(), ae.getResponseBody());
 		}
 		return result;
 	}
 
 	private byte[] processMultipleSecretResult(Object result) {
-		Map<String, String> map = new HashMap<String, String>();
-		String[] parts = result.toString().split(",");
-		{
-			for (int j = 0; j < parts.length; j++) {
-				String[] splitted = parts[j].split("[:/=]");
+	    String key = "";
+	    String value = "";
+	    String[] parts = result.toString().split(", ");
+        StringBuilder sb = new StringBuilder();
 
-				for (int i = 0; i < splitted.length; i++) {
-					map.put(splitted[3], splitted[4]);
-				}
-			}
-		}
-		return map.toString().getBytes();
+        for(int i=0; i<parts.length;i++) {
+        	if (parts[i].endsWith("}"))
+            parts[i] = parts[i].substring(0, parts[i].length() - 1); 
+	    	String[] tmpArr = parts[i].split("=");
+	        key= tmpArr[0];
+	        String[] tmp2 = key.split("/");
+	        key = tmp2[tmp2.length-1];
+	        value = parts[i].substring(parts[i].indexOf("=")+1, parts[i].length());
+	        sb.append(key+"="+value);
+	        if (i < parts.length - 1) {
+	        sb.append(",");
+	    }   
+        }
+	    return sb.toString().getBytes();
 	}
-
 }

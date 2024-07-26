@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.1.2] - 2024-07-26
+- Fix for downgrading the logging level from error to warn if no data found for variable
+- Fix for retrieving secrets with long key path in processMultipleSecretResult() for @ConjurValues (Bulk Retrieval) 
+
 ## [2.1.1] - 2024-06-12
-- Placeholder- Placeholder- Placeholder- Placeholder- Placeholder- Placeholder- Placeholder- Placeholder
+- Fix for @ConjurValues annotation always returning null value.
+- Fix to scan only for Conjur related variables 
+- Mapping for external property files
+- Externalising the mapping properties file path as env or in property file
 
 ## [2.1.0] - 2023-07-28
 ### Security
