@@ -23,7 +23,8 @@ if (params.MODE == "PROMOTE") {
     env.ASSET_DIR=assetDirectory
 
     infrapool.agentSh """
-
+      export ASSET_DIR="${env.ASSET_DIR}"
+      export MODE="${params.MODE}"
       git checkout "v${sourceVersion}"
       echo -n "${targetVersion}" > VERSION
       cp VERSION VERSION.original
