@@ -36,8 +36,6 @@ pushd ./conjur-intro
   ./bin/cli conjur list
 
   docker compose version
-  docker ps --format '{{.ID}}: {{.Names}}'
-
 
   # Retrieve pem
   conjur_cid=$(docker compose ps -q conjur-master.mycompany.local)
