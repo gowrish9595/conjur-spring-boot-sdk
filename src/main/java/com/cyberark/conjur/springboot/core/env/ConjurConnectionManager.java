@@ -27,6 +27,9 @@ import com.cyberark.conjur.sdk.endpoint.SecretsApi;
 import com.cyberark.conjur.springboot.constant.ConjurConstant;
 import com.cyberark.conjur.springboot.domain.ConjurProperties;
 
+import okhttp3.OkHttpClient;
+import okhttp3.logging.HttpLoggingInterceptor;
+
 /**
  *
  * This is the connection creation singleton class with conjur vault by using
@@ -88,8 +91,15 @@ public class ConjurConnectionManager implements EnvironmentAware, BeanFactoryPos
 			// postProcessBeanFactory lifecyle, properties as environment variables might
 			// not be set yet.
 			ApiClient client = Configuration.getDefaultApiClient();
+			
 			client.setAccount(conjurProperties.getAccount());
 			client.setBasePath(conjurProperties.getApplianceUrl());
+			
+			// Setting up telemetry headers
+			client.setIntegrationName(conjurProperties.getIntegrationName());
+			client.setIntegrationType(conjurProperties.getIntegrationType());
+			client.setIntegrationVersion(conjurProperties.getIntegrationVersion());
+			client.setVendorName(conjurProperties.getVendorName());
 
 			InputStream sslInputStream = null;
 			String sslCertificate = conjurProperties.getSslCertificate();
