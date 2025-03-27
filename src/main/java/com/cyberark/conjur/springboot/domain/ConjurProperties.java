@@ -4,12 +4,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.logging.Level;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.cyberark.conjur.springboot.core.env.ConjurConnectionManager;
 
 /**
  * The type Conjur properties.
@@ -18,7 +15,7 @@ public class ConjurProperties{
 	
 	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurProperties.class);
 	
-	//telemetry headers
+	// telemetry headers
 	private String integrationName = System.getenv().getOrDefault("INTEGRATION_NAME", "SecretsManagerSpringBoot SDK");
     private String integrationType = System.getenv().getOrDefault("INTEGRATION_TYPE", "cybr-secretsmanager-springboot");
     private String integrationVersion = getSDKVersion();  // Fetch from VERSION file
