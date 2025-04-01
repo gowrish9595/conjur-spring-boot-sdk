@@ -90,6 +90,12 @@ public class ConjurConnectionManager implements EnvironmentAware, BeanFactoryPos
 			ApiClient client = Configuration.getDefaultApiClient();
 			client.setAccount(conjurProperties.getAccount());
 			client.setBasePath(conjurProperties.getApplianceUrl());
+			
+			// Setting up telemetry headers
+			client.setIntegrationName(conjurProperties.getIntegrationName());
+			client.setIntegrationType(conjurProperties.getIntegrationType());
+			client.setIntegrationVersion(conjurProperties.getIntegrationVersion());
+			client.setVendorName(conjurProperties.getVendorName());
 
 			InputStream sslInputStream = null;
 			String sslCertificate = conjurProperties.getSslCertificate();

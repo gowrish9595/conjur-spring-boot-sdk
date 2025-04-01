@@ -1,10 +1,88 @@
 package com.cyberark.conjur.springboot.domain;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * The type Conjur properties.
  */
 public class ConjurProperties{
+	
+	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurProperties.class);
+	
+	// telemetry headers
+	private String integrationName = System.getenv().getOrDefault("INTEGRATION_NAME", "SecretsManagerSpringBoot SDK");
+    private String integrationType = System.getenv().getOrDefault("INTEGRATION_TYPE", "cybr-secretsmanager-springboot");
+    private String integrationVersion = getSDKVersion();  // Fetch from VERSION file
+    private String vendorName = System.getenv().getOrDefault("VENDOR_NAME", "CyberArk");
+    
+    /**
+     * Gets the integration name used for telemetry.
+     * 
+     * @return the integration name
+     */
+    public String getIntegrationName() {
+        return integrationName;
+    }
 
+    /**
+     * Gets the integration type used for telemetry.
+     * 
+     * @return the integration type
+     */
+    public String getIntegrationType() {
+        return integrationType;
+    }
+
+    /**
+     * Gets the integration version used for telemetry.
+     * 
+     * @return the integration version
+     */
+    public String getIntegrationVersion() {
+        return integrationVersion;
+    }
+
+    /**
+     * Gets the vendor name used for telemetry.
+     * 
+     * @return the vendor name.
+     */
+    public String getVendorName() {
+        return vendorName;
+    }
+    
+    // Method to get the SDK version from the V	ERSION file
+    public static String getSDKVersion() {
+        try {
+            Path rootDir = Paths.get("");
+            Path versionFile = rootDir.resolve("VERSION");
+
+            if (Files.exists(versionFile)) {
+                String version = new String(Files.readAllBytes(versionFile)).trim();
+                if (version.isEmpty()) {
+                    LOGGER.info("VERSION file is empty");
+                    return "unknown";
+                }
+
+                String[] parts = version.split("-");
+                String versionWithoutSnapshot = parts[0];
+
+                return versionWithoutSnapshot;
+            }
+            return "unknown";
+
+        } catch (IOException e) {
+            LOGGER.error("Error reading VERSION file: " + e.getMessage(), e);
+            return "unknown";  // Default version in case of error
+        }
+    }
+    
 	/**
 	 * The Account, can be injected with CONJUR_ACCOUNT environment variable
 	 * or spring boot property: conjur.account
@@ -277,6 +355,10 @@ public class ConjurProperties{
 				", authenticatorId='" + authenticatorId + '\'' +
 				", scanAllValues=" + scanAllValues +
 				", conjurMappingPath='" + mappingPath + '\'' +
+				", integrationName='" + integrationName + '\'' +
+                ", integrationVersion='" + integrationVersion + '\'' +
+                ", vendorName='" + vendorName + '\'' +
+                ", integrationType='" + integrationType + '\'' +
 				'}';
 	}
 }

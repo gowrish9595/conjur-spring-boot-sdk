@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.1.3] - 2025-04-01
+- Added telemetry headers
+
 ## [2.1.2] - 2024-07-26
 - Fix for downgrading the logging level from error to warn if no data found for variable
 - Fix for retrieving secrets with long key path in processMultipleSecretResult() for @ConjurValues (Bulk Retrieval) 
