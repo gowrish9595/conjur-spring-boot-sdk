@@ -33,15 +33,15 @@ mkdir -p tmp
 rm -rf tmp/*
 
 echo "${admin_api_key}" > api_key
-export CONJUR_AUTHN_TOKEN_FILE="/api_key"
+export CONJUR_AUTHN_TOKEN_FILE="/home/appuser/api_key"
 
 cat <<ENV > .env
 CONJUR_APPLIANCE_URL=https://proxy
 CONJUR_ACCOUNT=dev
 CONJUR_AUTHN_LOGIN=admin
 CONJUR_AUTHN_API_KEY=$admin_api_key
-CONJUR_CERT_FILE="/conjur-dev.pem"
-CONJUR_AUTHN_TOKEN_FILE="/api_key"
+CONJUR_CERT_FILE="/home/appuser/conjur-dev.pem"
+CONJUR_AUTHN_TOKEN_FILE="/home/appuser/api_key"
 ENV
 
 source .env
@@ -65,12 +65,13 @@ docker compose run \
 sleep 2
 
 docker compose run \
-  --volume "$(git rev-parse --show-toplevel):/repo" \
-  --volume "${PWD}/maven_cache":/root/.m2 \
-  --volume "${PWD}/api_key:/api_key" \
-  --volume "${PWD}/conjur-dev.pem:/conjur-dev.pem" \
+  --user root \
+  --volume "$(git rev-parse --show-toplevel):/home/appuser/repo" \
+  --volume "${PWD}/maven_cache":/home/appuser/.m2 \
+  --volume "${PWD}/api_key:/home/appuser/api_key" \
+  --volume "${PWD}/conjur-dev.pem:/home/appuser/conjur-dev.pem" \
   -e CONJUR_AUTHN_TOKEN_FILE \
-  --workdir "/repo" \
+  --workdir "/home/appuser/repo" \
   --no-deps \
   --rm \
   --entrypoint /bin/bash \

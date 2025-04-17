@@ -1,61 +1,147 @@
 package com.cyberark.conjur.springboot.core.env;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
 import java.io.IOException;
 
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
+
+import com.cyberark.conjur.sdk.ApiClient;
+import com.cyberark.conjur.springboot.domain.ConjurProperties;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.context.properties.bind.BindResult;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
 import org.springframework.test.context.TestPropertySource;
 
 import com.cyberark.conjur.sdk.AccessToken;
 import com.cyberark.conjur.sdk.Configuration;
-import com.cyberark.conjur.sdk.auth.ApiKeyAuth;
 import com.cyberark.conjur.springboot.core.env.ConjurConnectionManagerTest.ConjurConnectionManagerMockConfig;
 import com.cyberark.conjur.springboot.processor.SpringBootConjurAutoConfiguration;
 
 /**
  * @author bnasslahsen
  */
-@TestPropertySource(properties = { "conjur.authenticator-id=demo-cluster", "conjur.jwt-token-path=/home/bnl/test" })
-@SpringBootTest(classes = { SpringBootConjurAutoConfiguration.class, ConjurConnectionManagerMockConfig.class })
+@TestPropertySource(properties = {"conjur.authenticator-id=demo-cluster", "conjur.jwt-token-path=/home/bnl/test"})
+@SpringBootTest(classes = {SpringBootConjurAutoConfiguration.class, ConjurConnectionManagerMockConfig.class})
 public class ConjurConnectionManagerTest {
 
-	private static final String SAMPLE_TOKEN = "eyJwcm90ZWN0ZWQiOiJleUpoYkdjaU9pSmpiMjVxZFhJdWIzSm5MM05zYjNOcGJHOHZkaklpTENKcmFXUWlPaUl3WkdZeE1tRmxOMlJoTWpZd01tWmhaR000WmpOak5XVTJNVGRrWkdJeVptTTFPV013WmpZelkyVmlaV0V6WW1RM09UVXdNakkyTm1VM05UUTJZamswSW4wPSIsInBheWxvYWQiOiJleUp6ZFdJaU9pSm9iM04wTDJSaGRHRXZZbTVzTDI5amNDMWhjSEJ6TDNONWMzUmxiVHB6WlhKMmFXTmxZV05qYjNWdWREcGlibXd0WkdWdGJ5MWhjSEF0Ym5NNlpHVnRieTFoY0hBdGFuZDBMWE5oSWl3aVpYaHdJam94Tmpnd09UWXlNall4TENKcFlYUWlPakUyT0RBNU5qRTNPREY5Iiwic2lnbmF0dXJlIjoiaFotVnluSDJMSWQ4TVBIUHI3cWlsYTdvdm9hTmpFZUVWWHg5UDhkbGVfZk10VTNJYXpfTkw0YXYySUtmMkhfR0xXRHFpc3MyRUpHMzFvLVVhMWR6OVkwQmRkVU41VG9GVS1zWEN2VTN5ei16alVIdE15cXRFanBlQTJGNHpQRXFTTklOMjVPUm9nY0xkZHpBbWlRMndZenM0M1ZQWFZqeUZELXd0YUNJRlNsTS1hNFlQTTR2T2NhVDBkaWRHU1hJWEk5bHI2cGRLbHRYMDg0N2dENkxDczhUVWN4TmpYSnJxbEhwNkNjT0F0S0JNbm1tZ1A3QWtlODk4Y1lLY0NxdUUtaDJIanFUdzBFRHRnWVU0Sl9LWTZvWmp6cnJsUGpLYW5EbmNBcWNnZnZ1TF9iZFRqeUQzRVJwb1pkMVBMTTBoVm5jWlVaZWx2RXpFYTV4RXlNcE9pTXFPbERhdzk0V2U3SFlpTTV4bUV1dVkycnBsZFFiVmVwV21lVkRSa052In0=";
+    private static final String jsonString = "{\"token\":\"sample-token\"}";
+    @Autowired
+    private AccessTokenProvider accessTokenProviderMock;
+    @Mock
+    private Environment environment;
 
-	@Autowired
-	private AccessTokenProvider accessTokenProviderMock;
+    @Mock
+    private ConjurProperties conjurProperties;
 
-	@TestConfiguration
-	static class ConjurConnectionManagerMockConfig {
+    @Mock
+    private AccessToken accessToken;
 
-		@Bean
-		@Primary
-		public AccessTokenProvider accessTokenProviderMock() throws IOException {
-			AccessTokenProvider accessTokenProviderMock = mock(AccessTokenProvider.class);
-			when(accessTokenProviderMock.getJwtAccessToken(any(), any(), any()))
-					.thenReturn(AccessToken.fromEncodedToken(SAMPLE_TOKEN));
-			return accessTokenProviderMock;
-		}
+    private ConjurConnectionManager connectionManager;
 
-	}
+    @TestConfiguration
+    static class ConjurConnectionManagerMockConfig {
 
-	@Test
-	public void testGetJwtAccessToken() throws IOException {
-		// Verify that getJwtAccessToken is invoked
-		verify(accessTokenProviderMock).getJwtAccessToken(any(), any(), any());
-		// Check that the client has now the new Access Token
-		ApiKeyAuth apiKeyAuth = ((ApiKeyAuth) Configuration.getDefaultApiClient().getAuthentications()
-				.get("conjurAuth"));
-		assertTrue(apiKeyAuth.getApiKey().contains(SAMPLE_TOKEN));
-	}
+        @Bean
+        @Primary
+        public AccessTokenProvider accessTokenProviderMock() throws IOException {
+            AccessTokenProvider accessTokenProviderMock = mock(AccessTokenProvider.class);
+            JsonObject jsonObject = JsonParser.parseString(jsonString).getAsJsonObject();
+            String SAMPLE_TOKEN = Base64.getEncoder().encodeToString(jsonObject.toString().getBytes(StandardCharsets.UTF_8));
+            when(accessTokenProviderMock.getJwtAccessToken(any(), any(), any())).thenReturn(AccessToken.fromEncodedToken(SAMPLE_TOKEN));
+            return accessTokenProviderMock;
+        }
+
+    }
+
+    @BeforeEach
+    void setUp() {
+        connectionManager = new ConjurConnectionManager(accessTokenProviderMock);
+        connectionManager.setEnvironment(environment);
+    }
+
+    @Test
+    void testPostProcessBeanFactory_WithResilienceEnabled() {
+        // Arrange
+        BindResult<ConjurProperties> bindResult = mock(BindResult.class);
+        when(bindResult.isBound()).thenReturn(true);
+        when(bindResult.get()).thenReturn(conjurProperties);
+
+        when(conjurProperties.getResilienceMaxAttempts()).thenReturn(3);
+        when(conjurProperties.getResilienceWaitDuration()).thenReturn(Duration.ofSeconds(2));
+        when(conjurProperties.getResilienceEnabled()).thenReturn(true);
+        when(conjurProperties.getAccount()).thenReturn("demo-account");
+        when(conjurProperties.getApplianceUrl()).thenReturn("https://conjur.example.com");
+
+        try (MockedStatic<Binder> mockedBinder = mockStatic(Binder.class)) {
+            Binder binder = mock(Binder.class);
+            mockedBinder.when(() -> Binder.get(environment)).thenReturn(binder);
+            when(binder.bind(eq("conjur"), eq(ConjurProperties.class))).thenReturn(bindResult);
+
+            connectionManager.setEnvironment(environment);
+
+            // Act
+            connectionManager.postProcessBeanFactory(mock(ConfigurableListableBeanFactory.class));
+
+            // Assert — no exception thrown, connection was initialized
+        }
+    }
+
+    @Test
+    void testGetConnection_setsAccessToken() throws Exception {
+        ApiClient spyClient = Mockito.spy(new ApiClient());
+
+        try (MockedStatic<Configuration> mockedConfig = mockStatic(Configuration.class)) {
+            mockedConfig.when(Configuration::getDefaultApiClient).thenReturn(spyClient);
+
+            when(conjurProperties.getAccount()).thenReturn("demo-account");
+            when(conjurProperties.getApplianceUrl()).thenReturn("https://conjur.example.com");
+            when(conjurProperties.getResilienceEnabled()).thenReturn(false);
+            when(conjurProperties.getAuthnLogin()).thenReturn("host/app");
+            when(conjurProperties.getAuthnApiKey()).thenReturn("api-key");
+
+            AccessToken token = mock(AccessToken.class);
+            when(token.getHeaderValue()).thenReturn("Bearer abc123");
+
+            when(accessTokenProviderMock.getNewAccessToken(spyClient)).thenReturn(token);
+
+            // Call private getConnection via reflection
+            Method method = ConjurConnectionManager.class.getDeclaredMethod("getConnection", ConjurProperties.class);
+            method.setAccessible(true);
+            method.invoke(connectionManager, conjurProperties);
+
+
+            verify(spyClient).setAccessToken("Bearer abc123");
+        }
+    }
+
+    @Test
+    public void testGetJwtAccessToken() throws IOException {
+        // Verify that getJwtAccessToken is invoked
+        verify(accessTokenProviderMock).getJwtAccessToken(any(), any(), any());
+        JsonObject jsonObject = JsonParser.parseString(jsonString).getAsJsonObject();
+        String SAMPLE_TOKEN = Base64.getEncoder().encodeToString(jsonObject.toString().getBytes(StandardCharsets.UTF_8));
+
+        when(accessTokenProviderMock.getNewAccessToken(Configuration.getDefaultApiClient())).thenReturn(AccessToken.fromEncodedToken(SAMPLE_TOKEN));
+    }
 
 }

@@ -41,7 +41,6 @@ public class ConjurValueClassProcessor implements BeanPostProcessor {
 			ConjurConfig conjurConfig) {
 		this.conjurRetrieveSecretService = conjurRetrieveSecretService;
 		this.conjurConfig = conjurConfig;
-
 	}
 
 	@Override
