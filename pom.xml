@@ -65,33 +65,22 @@
       </distributionManagement>
     </profile>
 
-    <!-- Profile for deploying and releasing to Maven Central through OSSRH -->
+    <!-- Profile for deploying and releasing to Maven Central through Central Portal -->
     <profile>
-      <id>ossrh</id>
-      <distributionManagement>
-        <snapshotRepository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
-        <repository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-        </repository>
-      </distributionManagement>
+		<id>central-portal</id>
 
       <build>
         <plugins>
-          <plugin>
-            <groupId>org.sonatype.plugins</groupId>
-            <artifactId>nexus-staging-maven-plugin</artifactId>
-            <version>1.6.7</version>
-            <extensions>true</extensions>
-            <configuration>
-              <serverId>ossrh</serverId>
-              <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-              <autoReleaseAfterClose>true</autoReleaseAfterClose>
-            </configuration>
-          </plugin>
+			<plugin>
+				<groupId>org.sonatype.central</groupId>
+				<artifactId>central-publishing-maven-plugin</artifactId>
+				<version>0.7.0</version>
+				<extensions>true</extensions>
+				<configuration>
+					<publishingServerId>central</publishingServerId>
+					<autoPublish>true</autoPublish>
+				</configuration>
+			</plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-source-plugin</artifactId>
@@ -162,14 +151,6 @@
 		<maven.compiler.target>1.8</maven.compiler.target>
 		<okhttp3.version>4.10.0</okhttp3.version>
 	</properties>
-	
-	<repositories>
-	    <!-- OSSRH / Maven Central Repository -->
-	    <repository>
-	        <id>ossrh</id>
-	        <url>https://oss.sonatype.org/content/repositories/snapshots/</url> <!-- For SNAPSHOT artifacts -->
-	    </repository>
-	</repositories>
 
 	<dependencies>
 		<dependency>
@@ -319,4 +300,18 @@
 			<uniqueVersion>false</uniqueVersion>
 		</repository>
 	</distributionManagement>
+
+	<repositories>
+		<repository>
+			<name>Central Portal Snapshots</name>
+			<id>central-portal-snapshots</id>
+			<url>https://central.sonatype.com/repository/maven-snapshots/</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+	</repositories>
 </project>
