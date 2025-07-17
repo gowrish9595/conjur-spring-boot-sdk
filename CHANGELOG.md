@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## [2.2.0] 2025-07-16
+## [2.2.0] - 2025-07-16
 - Added support to fail the microservice/application bootup in case of non-availability of secrets
 - Disable the support of logging authentication tokens or api keys
 
