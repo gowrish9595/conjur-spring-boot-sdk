@@ -52,18 +52,19 @@ popd
 pwd
 
 docker run \
-  --volume "$(git rev-parse --show-toplevel):/repo" \
-  --volume "${PWD}/maven_cache":/root/.m2 \
-  --volume "${PWD}/api_key:/api_key" \
-  --volume "${PWD}/conjur-enterprise.pem:/conjur-enterprise.pem" \
+  --user root \
+  --volume "$(git rev-parse --show-toplevel):/home/appuser/repo" \
+  --volume "${PWD}/maven_cache":/home/appuser/.m2 \
+  --volume "${PWD}/api_key:/home/appuser/api_key" \
+  --volume "${PWD}/conjur-enterprise.pem:/home/appuser/conjur-enterprise.pem" \
   --network dap_net \
   -e "CONJUR_APPLIANCE_URL=https://conjur-master.mycompany.local" \
   -e "CONJUR_ACCOUNT=demo" \
   -e "CONJUR_AUTHN_LOGIN=admin" \
   -e "CONJUR_AUTHN_API_KEY=${admin_api_key}" \
-  -e "CONJUR_CERT_FILE=/conjur-enterprise.pem" \
-  -e "CONJUR_AUTHN_TOKEN_FILE=/api_key" \
-  --workdir "/repo" \
+  -e "CONJUR_CERT_FILE=/home/appuser/conjur-enterprise.pem" \
+  -e "CONJUR_AUTHN_TOKEN_FILE=/home/appuser/api_key" \
+  --workdir "/home/appuser/repo" \
   --rm \
   --entrypoint /bin/bash \
   sampleapp \

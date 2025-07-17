@@ -29,7 +29,6 @@ public class DefaultPropertySourceChain extends PropertyProcessorChain {
 
 	@Override
 	public String[] getPropertyNames() {
-
 		return new String[0];
 	}
 	/**
@@ -38,6 +37,7 @@ public class DefaultPropertySourceChain extends PropertyProcessorChain {
 	 */
 	@Override
 	public Object getProperty(String name) {
+
 		return this.chain.getProperty(name);
 	}
 

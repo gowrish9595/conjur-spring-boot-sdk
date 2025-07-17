@@ -78,4 +78,9 @@ public class ConjurConstant {
 	 */
 	public static final String CONJUR_SCAN_ALL_VALUES = "conjur.scan-all-values";
 	
+	/**
+	 * The constant RESILIENCE_PREFIX.
+	 */
+	public static final String RESILIENCE_PREFIX = "resilience4j";
+		
 }

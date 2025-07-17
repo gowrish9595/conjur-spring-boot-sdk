@@ -1,9 +1,16 @@
 package com.cyberark.conjur.springboot.domain;
 
+import java.io.BufferedReader;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +27,16 @@ public class ConjurProperties{
     private String integrationType = System.getenv().getOrDefault("INTEGRATION_TYPE", "cybr-secretsmanager-springboot");
     private String integrationVersion = getSDKVersion();  // Fetch from VERSION file
     private String vendorName = System.getenv().getOrDefault("VENDOR_NAME", "CyberArk");
+    
+	private Map<String, String> mapping = new HashMap<>();
+
+    public Map<String, String> getMapping() {
+		return mapping;
+	}
+
+	public void setMapping(Map<String, String> mapping) {
+		this.mapping = mapping;
+	}
     
     /**
      * Gets the integration name used for telemetry.
@@ -57,31 +74,33 @@ public class ConjurProperties{
         return vendorName;
     }
     
-    // Method to get the SDK version from the V	ERSION file
+    // Method to get the SDK version from the CHANGELOG file   
     public static String getSDKVersion() {
-        try {
-            Path rootDir = Paths.get("");
-            Path versionFile = rootDir.resolve("VERSION");
+        final String fallbackVersion = "unset";
+        String changelogFilePath = "/CHANGELOG.md";
+        Pattern versionPattern = Pattern.compile("## \\[([\\d]+(?:\\.[\\d]+)*)\\]");
 
-            if (Files.exists(versionFile)) {
-                String version = new String(Files.readAllBytes(versionFile)).trim();
-                if (version.isEmpty()) {
-                    LOGGER.info("VERSION file is empty");
-                    return "unknown";
-                }
-
-                String[] parts = version.split("-");
-                String versionWithoutSnapshot = parts[0];
-
-                return versionWithoutSnapshot;
-            }
-            return "unknown";
-
-        } catch (IOException e) {
-            LOGGER.error("Error reading VERSION file: " + e.getMessage(), e);
-            return "unknown";  // Default version in case of error
+        InputStream inputStream = ConjurProperties.class.getResourceAsStream(changelogFilePath);
+        
+        if (inputStream == null) {
+            LOGGER.warn("CHANGELOG.md file not found.");
+            return fallbackVersion;
         }
-    }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                Matcher matcher = versionPattern.matcher(line);
+                if (matcher.find()) {
+                    return matcher.group(1);
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Error reading CHANGELOG.md from the JAR.", e);
+        }
+
+        return fallbackVersion;
+    	}
     
 	/**
 	 * The Account, can be injected with CONJUR_ACCOUNT environment variable
@@ -143,6 +162,24 @@ public class ConjurProperties{
 	 * The Conjur mapping path.
 	 */
 	private String mappingPath;
+
+	/**
+	 * Can be injected with the CONJUR_RESILIENCE_ENABLED environment variable
+	 * or the Spring Boot property: conjur.resilience-enabled
+	 */
+	private Boolean resilienceEnabled;
+
+	/**
+	 * Can be injected with the CONJUR_RESILIENCE_MAX_ATTEMPTS environment variable
+	 * or the Spring Boot property: conjur.resilience-max-attempts
+	 */
+	private Integer resilienceMaxAttempts;
+
+	/**
+	 * Can be injected with the CONJUR_RESILIENCE_WAIT_DURATION environment variable
+	 * or the Spring Boot property: conjur.resilience-wait-duration
+	 */
+	private Duration resilienceWaitDuration;
 
 	/**
 	 * Gets account.
@@ -341,20 +378,68 @@ public class ConjurProperties{
 	public void setMappingPath(String mappingPath) {
 		this.mappingPath = mappingPath;
 	}
+	
+	/**
+	 * Gets the resilience enabled value.
+	 *
+	 * @return the resilience enabled value
+	 */
+	public Boolean getResilienceEnabled() {
+	    return resilienceEnabled != null ? resilienceEnabled : false;
+	}
+
+	/**
+	 * Sets resilience enabled value.
+	 *
+	 * @param resilienceEnabled resilience enabled value
+	 */
+	public void setResilienceEnabled(Boolean resilienceEnabled) {
+		this.resilienceEnabled = resilienceEnabled;
+	}
+
+	/**
+	 * Gets the resilience max attempts.
+	 *
+	 * @return the resilience max attempts
+	 */
+	public int getResilienceMaxAttempts() {
+	    return resilienceMaxAttempts != null ? resilienceMaxAttempts : 3;
+	}
+
+	/**
+	 * Sets the resilience max attempts.
+	 *
+	 * @param resilienceMaxAttempts the resilience max attempts
+	 */
+	public void setResilienceMaxAttempts(Integer resilienceMaxAttempts) {
+	    this.resilienceMaxAttempts = resilienceMaxAttempts;
+	}
+
+	/**
+	 * Gets the resilience wait duration.
+	 *
+	 * @return the resilience wait duration
+	 */
+	public Duration getResilienceWaitDuration() {
+	    return resilienceWaitDuration != null ? resilienceWaitDuration : Duration.ofMillis(500);
+	}
+
+	/**
+	 * Sets the resilience wait duration.
+	 *
+	 * @param resilienceWaitDuration the resilience wait duration
+	 */
+	public void setResilienceWaitDuration(Duration resilienceWaitDuration) {
+		this.resilienceWaitDuration = resilienceWaitDuration;
+	}
+
 	@Override
 	public String toString() {
 		return "ConjurProperties{" +
 				"account='" + account + '\'' +
 				", applianceUrl='" + applianceUrl + '\'' +
-				", authTokenFile='" + authTokenFile + '\'' +
-				", authnApiKey='" + authnApiKey + '\'' +
 				", authnLogin='" + authnLogin + '\'' +
-				", certFile='" + certFile + '\'' +
-				", sslCertificate='" + sslCertificate + '\'' +
-				", jwtTokenPath='" + jwtTokenPath + '\'' +
-				", authenticatorId='" + authenticatorId + '\'' +
 				", scanAllValues=" + scanAllValues +
-				", conjurMappingPath='" + mappingPath + '\'' +
 				", integrationName='" + integrationName + '\'' +
                 ", integrationVersion='" + integrationVersion + '\'' +
                 ", vendorName='" + vendorName + '\'' +

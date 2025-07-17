@@ -1,6 +1,7 @@
 package com.cyberark.conjur.springboot.core.env;
 
 import java.lang.reflect.Field;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,14 +12,15 @@ import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.util.ClassUtils;
 
-import com.cyberark.conjur.sdk.ApiException;
 import com.cyberark.conjur.sdk.endpoint.SecretsApi;
 import com.cyberark.conjur.springboot.constant.ConjurConstant;
+import com.cyberark.conjur.springboot.util.ConjurSecretUtils;
+import com.google.gson.Gson;
 
 /**
  * 
- * This class resolves the secret value for give vault path at application load
- * time from the conjur vault.
+ * This class resolves the secret value for given vault path at application load
+ * time from the Conjur vault.
  *
  */
 public class ConjurPropertySource extends EnumerablePropertySource<Object> {
@@ -33,19 +35,22 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 
 	private ConjurConfig conjurConfig;
 
+	private ConjurSecretUtils conjurSecretUtils;
+	private boolean resilienceEnabled = false;
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurPropertySource.class);
 
-	protected ConjurPropertySource(String vaultPath) {
+	public ConjurPropertySource(String vaultPath) {
 		super(vaultPath + "@");
 		this.vaultPath = vaultPath;
-
 	}
 
-	protected ConjurPropertySource(String vaultPath, String vaultInfo, AnnotationMetadata importingClassMetadata)
+	public ConjurPropertySource(String vaultPath, String vaultInfo, AnnotationMetadata importingClassMetadata)
 			throws ClassNotFoundException {
 		super(vaultPath + "@" + vaultInfo);
 		this.vaultPath = vaultPath;
 		this.vaultInfo = vaultInfo;
+
 		List<String> properties = new ArrayList<>();
 		Class<?> annotatedClass = ClassUtils.forName((importingClassMetadata).getClassName(),
 				getClass().getClassLoader());
@@ -64,35 +69,68 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 	}
 
 	/**
-	 * Method which resolves @value annotation queries and return result in the form
-	 * of byte array.
+	 * Method which resolves @Value annotation queries and return result in the form
+	 * of byte array or String.
 	 */
-
 	@Override
 	public Object getProperty(String key) {
-		byte[] result = null;
+
+		Gson gson = new Gson();
+		Object secretValue = null;
+
 		if (!vaultPath.endsWith("/")) {
 			this.vaultPath = vaultPath.concat("/");
 		}
+
 		if (propertyExists(key)) {
+			int maxAttempt =0;
+			Duration waitDuration;
+
 			key = conjurConfig.mapProperty(key);
+			resilienceEnabled = conjurConfig.getResilienceEnabled();
+			maxAttempt = conjurConfig.getResilienceMaxAttempts();
+			waitDuration = conjurConfig.getResilienceWaitDuration();
+
+			conjurSecretUtils = ConjurSecretUtils.create(resilienceEnabled,maxAttempt,waitDuration);
+
 			try {
 				String account = ConjurConnectionManager.getAccount(secretsApi);
-				String secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, vaultPath + key);
-				result = secretValue != null ? secretValue.getBytes() : null;
-				
-			} catch (ApiException ae) {
 
-				LOGGER.warn("Failed to get property from Conjur for: " + key);
-				LOGGER.warn("Reason: " + ae.getResponseBody());
-				LOGGER.warn(ae.getMessage());
+				if (key.contains(",")) {
+					// Bulk fetch multiple keys
+					String[] keys = key.split(",");
+					StringBuilder fullKeysBuilder = new StringBuilder();
+
+					if (keys.length > 0) {
+						String firstMappedKey = conjurConfig.mapProperty(keys[0]);
+						fullKeysBuilder.append(account).append(":variable:").append(vaultPath).append(firstMappedKey);
+						for (int i = 1; i < keys.length; i++) {
+							String mappedKey = conjurConfig.mapProperty(keys[i]);
+							fullKeysBuilder.append(",").append(account).append(":variable:").append(vaultPath)
+									.append(mappedKey);
+						}
+					}
+
+					secretValue = conjurSecretUtils.fetchSecrets(secretsApi, fullKeysBuilder.toString(), gson);
+
+				} else {
+					LOGGER.info("Calling single secret retrieval >>");
+					String fullPath = vaultPath + key;
+					byte[] secret = conjurSecretUtils.fetchSecret(secretsApi, account, ConjurConstant.CONJUR_KIND,
+							fullPath);
+					secretValue = secret;
+				}
+			} catch (Exception e) {
+				LOGGER.error("Error fetching secret(s) from Conjur", e);
+				return null;
 			}
 		}
-		return result;
+
+		return secretValue;
 	}
 
 	/**
-	 * To set the secert api value
+	 * To set the secret api value
 	 * 
 	 * @param secretsApi
 	 */
@@ -101,10 +139,11 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 	}
 
 	private boolean propertyExists(String key) {
-		return properties.stream().anyMatch(property -> property.contains(key));
+		return properties != null && properties.stream().anyMatch(property -> property.contains(key));
 	}
 
 	public void setConjurConfig(ConjurConfig conjurConfig) {
 		this.conjurConfig = conjurConfig;
 	}
+
 }

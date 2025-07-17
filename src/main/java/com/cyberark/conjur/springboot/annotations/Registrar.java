@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 
 import com.cyberark.conjur.sdk.endpoint.SecretsApi;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
@@ -12,6 +14,8 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.boot.context.properties.bind.BindResult;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.context.annotation.ImportBeanDefinitionRegistrar;
 import org.springframework.core.annotation.AnnotationAttributes;
@@ -21,6 +25,11 @@ import org.springframework.core.env.MutablePropertySources;
 import org.springframework.core.type.AnnotationMetadata;
 import org.springframework.util.MultiValueMap;
 import com.cyberark.conjur.springboot.core.env.ConjurConfig;
+import com.cyberark.conjur.springboot.domain.ConjurProperties;
+
+import static com.cyberark.conjur.springboot.constant.ConjurConstant.CONJUR_PREFIX;
+
+
 /**
  * 
  * This class helps to get all variables defined on the custom annotation side
@@ -28,8 +37,12 @@ import com.cyberark.conjur.springboot.core.env.ConjurConfig;
  *
  */
 public class Registrar implements ImportBeanDefinitionRegistrar, BeanFactoryPostProcessor, EnvironmentAware {
+	
+	private static final Logger LOGGER = LoggerFactory.getLogger(Registrar.class);
+
 
 	private Environment environment;
+
 
 	@Override
 	public void setEnvironment(Environment environment) {
@@ -119,6 +132,15 @@ public class Registrar implements ImportBeanDefinitionRegistrar, BeanFactoryPost
 	private void registerBeanDefinition(BeanDefinitionRegistry registry, Class<?> type, String name, String value,
 			String vaultInfo, AnnotationMetadata importingClassMetadata) {
 		BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(type);
+
+		//logic to bind the props and map vaultpath dynamically
+		ConjurConfig conjurConfig = new ConjurConfig();
+		final BindResult<ConjurProperties> result = Binder.get(environment).bind(CONJUR_PREFIX, ConjurProperties.class);
+		if (result.isBound()) {
+			ConjurConfig.loadMappingProps(result);
+		}
+		value = conjurConfig.mapProperty(value);
+		
 		builder.addConstructorArgValue(value);
 		builder.addConstructorArgValue(vaultInfo);
 		builder.addConstructorArgValue(importingClassMetadata);

@@ -25,6 +25,11 @@ This repo is a **Certified** level project. It's a community contributed project
 The following features are available with the Spring Boot Plugin:
 
 * Seamless integration of the spring boot conjur plugin to exisitng or new Spring Boot application to retireve secrets from CyberArk Conjur with miniaml code change by annotating with @ConjurPropertySource or no code change (dynamic mapping of secrets to credential variables annotated with @Value.
+* Plugin now allow the users to enable the  the Retry mechanism by configuring max-attempts & wait-duration for tranisent failures which will stop the starting the Microservices. Retry mechanism can be enabled by configuring the conjur.resilience-enabled param. By default the param value is set to false( to support backward compatibility), need to set to true to enable Retry feature.
+* If conjur.resilience-enabled flag is set to true, then set the max-attempts and wait-duration parameters as defined in the configuration section.
+* The secrets are exposed as environment variables, with this approach ,there will no code change required as usesrs/developers can configure properties as placeholder value in application properties and fetch using @Value (key configured in application properties).
+* Support to externalize key mappings within application.properties and environment params, addressing limitations of the current conjur.properties approach. This aligns with standard deployment workflows where pipelines generate OpenShift ConfigMaps from application-specific application.properties files. The existing method requires multiple ConfigMaps and volume mounts, adding unnecessary complexity.
+* Support to externalize the path specified in the @ConjurPropertySource annotation to support dynamic configuration, aligning with the current approach for externalizing key mappings.
 * Externalize the properties using the Spring cloud Config Server or as System Property
 * API authentication
 
@@ -40,11 +45,12 @@ The Spring Cloud Config Conjur plugin does not support creating, updating or rem
 | Java              | 8+                |
 | Conjur OSS        | 1.9+              |
 | Conjur Enterprise | 12.5+             |
-| Conjur Cloud		|
+| Conjur Cloud		|                   |
 | ConjurSDK(Java)   | 4.1.0             |
 | Conjur API        | 5.1               |
 | Spring Cloud      | 2021.x and 2022.x |
 | Spring Boot       | 2.x and 3.x       |
+| resilience4j      | 1.7.1             |
 
 
 
@@ -177,13 +183,16 @@ By default, Conjur  generates and uses self-signed SSL certificates. Without tru
    
    ```
    exampleService.properties
-   CONJUR.ACCOUNT = <Account to connect>
-   CONJUR.APPLIANCE_URL = <Conjur instance to connect>
-   CONJUR.AUTHN_LOGIN = <User /host identity>
-   CONJUR.API_KEY = <User/host API Key/password>
-   CONJUR.AUTHN_TOKEN_FILE = <Path to token file containing API key> -optional
-   CONJUR.CERT_FILE = <Path to certificate file>
-   CONJUR.SSL_CERTIFICATE = <Certificate content>
+   conjur.account = <Account to connect>
+   conjur.appliance-url = <Conjur instance to connect>
+   conjur.authn-login = <User /host identity>
+   conjur.authn-api-key = <User/host API Key/password>
+   conjur.auth-token-file = <Path to token file containing API key> -optional
+   conjur.cert-file = <Path to certificate file>
+   conjur.ssl-certificate = <Certificate content>
+   conjur.resilience-enabled = false <Mandatory ,default false. Should be true, for Enabling retry mechanism should be true>
+   conjur.resilience-max-attempts = <Optional,maximum number of retry to work in case of failure Example:3 -will be retried 2       								times +initial try>
+   conjur.resilience-wait-duration= <Optional,amount of time to wait between retry attempts ,should be in milliseconds, seconds,           								 Example :400ms>
    ```
    
 
@@ -201,7 +210,7 @@ By default, Conjur  generates and uses self-signed SSL certificates. Without tru
 
   5. Creating property file for different environment
 
-   
+   The new enhancement allow users to configure params at Env/application.properties/conjur.properties including below
    Properties file can created for different environment from Dev to Prod 
    exampleService-dev.properties
    exampleService-uat.properties 
@@ -271,15 +280,18 @@ You can do this by setting Conjur Properties or [Environment variables](#environ
 #### CyberArk Conjur Configuration Properties
 The following configuration properties can be set in the standard `spring-boot` configuration files, `application.properties` or `application.yml`:
 
-| Parameter name           | Description                             |
-|:-------------------------|:----------------------------------------|
-| conjur.account           | CyberArk Conjur Account                 |
-| conjur.appliance-url     | CyberArk Conjur Appliance URL           |
-| conjur.authn-login       | CyberArk Conjur User /host identity     |
-| conjur.authn-api-key     | CyberArk Conjur API KEY of the host     |
-| conjur.auth-token-file   | CyberArk Conjur Token, stored in a file |
-| conjur.cert-file         | CyberArk Conjur SSL Certificate path    |
-| conjur.ssl-certificate   | CyberArk Conjur SSL Certificate Content |
+| Parameter name                 | Description                             |
+|:-------------------------------|:----------------------------------------|
+| conjur.account                 | CyberArk Conjur Account                 |
+| conjur.appliance-url           | CyberArk Conjur Appliance URL           |
+| conjur.authn-login             | CyberArk Conjur User /host identity     |
+| conjur.authn-api-key           | CyberArk Conjur API KEY of the host     |
+| conjur.auth-token-file         | CyberArk Conjur Token, stored in a file |
+| conjur.cert-file               | CyberArk Conjur SSL Certificate path    |
+| conjur.ssl-certificate         | CyberArk Conjur SSL Certificate Content |
+| conjur.resilience-enabled      | CyberArk Conjur Resilience Enabled flag |
+| conjur.resilience-max-attempts | CyberArk Conjur max retry attempts      |
+| conjur.resilience-wait-duration| CyberArk Conjur wait duration to retry  |       
 	
 <h4 id="environment-variables">
  Environment Variables
@@ -290,14 +302,17 @@ For example:`appliance_url` is `CONJUR_APPLIANCE_URL`, `account` is `CONJUR_ACCO
 
 If no other configuration is done (e.g. over system properties or CLI parameters), include the following environment variables in the app's runtime environment to use the Spring Boot Plugin.
 
-| Name                    | Environment ID          | Description                | API KEY | JWT  |
-| ----------------------- | ----------------------- | -------------------------- | ------- | ---- |
-| Conjur Account          | CONJUR_ACCOUNT          | Account to connect         | Yes     | Yes  |
-| API key                 | CONJUR_AUTHN_API_KEY    | User/host API Key/password | Yes     | No   |
-| Connection url          | CONJUR_APPLIANCE_URL    | Conjur instance to connect | Yes     | Yes  |
-| User/host identity      | CONJUR_AUTHN_LOGIN      | User /host identity        | Yes     | No   |
-| SSL Certificate Path    | CONJUR_CERT_FILE        | Path to certificate file   | Yes     | Yes  |
-| SSL Certificate Content | CONJUR_SSL_CERTIFICATE  | Certificate content        | Yes     | Yes  |
+| Name                    | Environment ID                | Description                | API KEY | JWT  |
+| ----------------------- | ------------------------------| -------------------------- | ------- | ---- |
+| Conjur Account          | CONJUR_ACCOUNT                | Account to connect         | Yes     | Yes  |
+| API key                 | CONJUR_AUTHN_API_KEY          | User/host API Key/password | Yes     | No   |
+| Connection url          | CONJUR_APPLIANCE_URL          | Conjur instance to connect | Yes     | Yes  |
+| User/host identity      | CONJUR_AUTHN_LOGIN            | User /host identity        | Yes     | No   |
+| SSL Certificate Path    | CONJUR_CERT_FILE              | Path to certificate file   | Yes     | Yes  |
+| SSL Certificate Content | CONJUR_SSL_CERTIFICATE        | Certificate content        | Yes     | Yes  |
+| Resilience Enabled      | CONJUR_RESILIENCE_ENABLED     | Conjur Resilience Enabled  | Yes     | Yes  |
+| Max-Attempts            | CONJUR_RESILIENCE_MAX_ATTEMPTS| Conjur Retry Max-Attemts   | Yes     | Yes  |
+| Wait-Duration           | CONJUR_RESILIENCE_WAIT_DURATION| Conjur Retry Wait-Duration| Yes     | Yes  |
 
 Only one CONJUR_CERT_FILE and CONJUR_SSL_CERTIFICATE is required. There are two variables to allow the user to specify the path to a certificate file or provide the certificate data directly in an environment variable.
 </details>
@@ -322,6 +337,9 @@ The following configuration properties can be set in the standard `spring-boot` 
 | conjur.authenticator-id  | CyberArk Conjur authenticator ID        |
 | conjur.jwt-token-path    | CyberArk Conjur Path of the JWT Token   |
 | conjur.mapping-path      | CyberArk Conjur Mapping Path            |
+| conjur.resilience-enabled| CyberArk Conjur Resilience Enable flag  |
+| conjur.max-wait          | CyberArk Conjur Max retry attempts      |
+| conjur.wait-duration     | CyberArk Conjur Max wait duration for retry|
 
 	
 <h4 id="environment-variables">
@@ -334,17 +352,20 @@ For example:`appliance_url` is `CONJUR_APPLIANCE_URL`, `account` is `CONJUR_ACCO
 
 If no other configuration is done (e.g. over system properties or CLI parameters), include the following environment variables in the app's runtime environment to use the Spring Boot Plugin.
 
-| Name                    | Environment ID          | Description                | API KEY | JWT  |
-| ----------------------- | ----------------------- | -------------------------- | ------- | ---- |
-| Conjur Account          | CONJUR_ACCOUNT          | Account to connect         | Yes     | Yes  |
-| API key                 | CONJUR_AUTHN_API_KEY    | User/host API Key/password | Yes     | No   |
-| Connection url          | CONJUR_APPLIANCE_URL    | Conjur instance to connect | Yes     | Yes  |
-| User/host identity      | CONJUR_AUTHN_LOGIN      | User /host identity        | Yes     | No   |
-| SSL Certificate Path    | CONJUR_CERT_FILE        | Path to certificate file   | Yes     | Yes  |
-| SSL Certificate Content | CONJUR_SSL_CERTIFICATE  | Certificate content        | Yes     | Yes  |
-| Path of the JWT Token   | CONJUR_JWT_TOKEN_PATH   | Path of the JWT Token      | No      | Yes  |
-| Conjur authenticator ID | CONJUR_AUTHENTICATOR_ID | Conjur authenticator ID    | No      | Yes  |
-| Conjur MAPPING PATH     | CONJUR_MAPPING_PATH     | Conjur Mapping PATH        | Yes      | Yes  |
+| Name                    | Environment ID                | Description                | API KEY | JWT  |
+| ----------------------- | ------------------------------| -------------------------- | ------- | ---- |
+| Conjur Account          | CONJUR_ACCOUNT                | Account to connect         | Yes     | Yes  |
+| API key                 | CONJUR_AUTHN_API_KEY          | User/host API Key/password | Yes     | No   |
+| Connection url          | CONJUR_APPLIANCE_URL          | Conjur instance to connect | Yes     | Yes  |
+| User/host identity      | CONJUR_AUTHN_LOGIN            | User /host identity        | Yes     | No   |
+| SSL Certificate Path    | CONJUR_CERT_FILE              | Path to certificate file   | Yes     | Yes  |
+| SSL Certificate Content | CONJUR_SSL_CERTIFICATE        | Certificate content        | Yes     | Yes  |
+| Path of the JWT Token   | CONJUR_JWT_TOKEN_PATH         | Path of the JWT Token      | No      | Yes  |
+| Conjur authenticator ID | CONJUR_AUTHENTICATOR_ID       | Conjur authenticator ID    | No      | Yes  |
+| Conjur MAPPING PATH     | CONJUR_MAPPING_PATH           | Conjur Mapping PATH        | Yes     | Yes  |
+| Resilience Enabled      | CONJUR_RESILIENCE_ENABLED     | Conjur Resilience Enabled  | Yes     | Yes  |
+| Max-Attempts            | CONJUR_RESILIENCE_MAX_ATTEMPTS| Conjur Retry Max-Attemts   | Yes     | Yes  |
+| Wait-Duration           | CONJUR_RESILIENCE_WAIT_DURATION| Conjur Retry Wait-Duration| Yes     | Yes  |
 
 Only one CONJUR_CERT_FILE and CONJUR_SSL_CERTIFICATE is required. There are two variables to allow the user to specify the path to a certificate file or provide the certificate data directly in an environment variable.
 </details>

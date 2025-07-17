@@ -1,87 +1,117 @@
 package com.cyberark.conjur.springboot.processor;
 
 
+import java.time.Duration;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.cyberark.conjur.sdk.ApiException;
 import com.cyberark.conjur.sdk.endpoint.SecretsApi;
 import com.cyberark.conjur.springboot.constant.ConjurConstant;
+import com.cyberark.conjur.springboot.core.env.ConjurConfig;
 import com.cyberark.conjur.springboot.core.env.ConjurConnectionManager;
+import com.cyberark.conjur.springboot.util.ConjurSecretUtils;
+import com.google.gson.Gson;
+
 
 public class ConjurRetrieveSecretService {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurRetrieveSecretService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConjurRetrieveSecretService.class);
 
-	private final SecretsApi secretsApi;
+    private final SecretsApi secretsApi;
 
-	public ConjurRetrieveSecretService(SecretsApi secretsApi) {
-		this.secretsApi = secretsApi;
-	}
+    private ConjurSecretUtils conjurSecretUtils;
+    
+    @Autowired
+    private ConjurConfig conjurConfig;
 
-	/**
-	 * This method retrieves multiple secrets for custom annotation's keys.
-	 *
-	 * @param keys - query to vault.
-	 * @return secrets - output from the vault.
-	 */
-	public byte[] retriveMultipleSecretsForCustomAnnotation(String[] keys) throws ApiException {
+    public ConjurRetrieveSecretService(SecretsApi secretsApi) {
+        this.secretsApi = secretsApi;
+    }
 
-		Object result = null;
-		StringBuilder kind = new StringBuilder();
-		if (keys.length > 0) {
-			kind.append("" + ConjurConstant.CONJUR_ACCOUNT + ":variable:" + keys[0] + "");
-			for (int i = 1; i < keys.length; i++) {
-				kind.append("," + ConjurConstant.CONJUR_ACCOUNT + ":variable:" + keys[i]);
-			}
-		}
-		try {
-			result = secretsApi.getSecrets(new String(kind));
-		} catch (ApiException ae) {
-			throw new ApiException(ae.getCode(), ae.getMessage(), null, ae.getResponseBody());
+    private void initializeConjurSecretUtils() {
+    	boolean resilienceEnabled = false;
+    	int maxAttempt =0;
+		Duration waitDuration;
 
-		}
-		return processMultipleSecretResult(result);
+    	resilienceEnabled = conjurConfig.getResilienceEnabled();
+    	maxAttempt = conjurConfig.getResilienceMaxAttempts();
+		waitDuration = conjurConfig.getResilienceWaitDuration();
 
-	}
+    	conjurSecretUtils = ConjurSecretUtils.create(resilienceEnabled,maxAttempt,waitDuration);
 
-	/**
-	 * This method retrieves single secret for custom annotation's key value.
-	 * 
-	 * @param key - query to vault.
-	 * @return secrets - output from the vault.
-	 */
-	public byte[] retriveSingleSecretForCustomAnnotation(String key) throws ApiException {
-		byte[] result = null;
-		try {
-			String account = ConjurConnectionManager.getAccount(secretsApi);
-			String secret = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, key);
-			result = secret != null ? secret.getBytes() : null;
-		} catch (ApiException ae) {
-			throw new ApiException(ae.getCode(), ae.getResponseBody());
-		}
-		return result;
-	}
+    }
 
-	private byte[] processMultipleSecretResult(Object result) {
-	    String key = "";
-	    String value = "";
-	    String[] parts = result.toString().split(", ");
-        StringBuilder sb = new StringBuilder();
-
-        for(int i=0; i<parts.length;i++) {
-        	if (parts[i].endsWith("}"))
-            parts[i] = parts[i].substring(0, parts[i].length() - 1); 
-	    	String[] tmpArr = parts[i].split("=");
-	        key= tmpArr[0];
-	        String[] tmp2 = key.split("/");
-	        key = tmp2[tmp2.length-1];
-	        value = parts[i].substring(parts[i].indexOf("=")+1, parts[i].length());
-	        sb.append(key+"="+value);
-	        if (i < parts.length - 1) {
-	        sb.append(",");
-	    }   
+    /**
+     * This method retrieves multiple secrets for custom annotation's keys.
+     *
+     * @param keys - query to vault.
+     * @return secrets - output from the vault.
+     * @throws ApiException if error fetching secrets
+     */
+    public byte[] retriveMultipleSecretsForCustomAnnotation(String[] keys) throws ApiException {
+        if (conjurSecretUtils == null) {
+            initializeConjurSecretUtils();
         }
-	    return sb.toString().getBytes();
-	}
+
+        if (keys == null || keys.length == 0) {
+            return new byte[0];
+        }
+
+        StringBuilder fullKeysBuilder = new StringBuilder();
+        String account = ConjurConnectionManager.getAccount(secretsApi);
+
+        fullKeysBuilder.append(account).append(":variable:").append(keys[0]);
+        for (int i = 1; i < keys.length; i++) {
+            fullKeysBuilder.append(",").append(account).append(":variable:").append(keys[i]);
+        }
+
+        Gson gson = new Gson();
+        try {
+            Object result = conjurSecretUtils.fetchSecrets(secretsApi, fullKeysBuilder.toString(), gson);
+
+            if (result instanceof String) {
+                return ((String) result).getBytes();
+            } else if (result instanceof byte[]) {
+                return (byte[]) result;
+            } else {
+                return result.toString().getBytes();
+            }
+        } catch (ApiException e) {
+            LOGGER.error("Error during bulk secret retrieval for keys: {}", fullKeysBuilder, e);
+            throw e;
+        }
+    }
+
+    /**
+     * This method retrieves single secret for custom annotation's key value.
+     *
+     * @param key - query to vault.
+     * @return secrets - output from the vault.
+     * @throws ApiException if error fetching secret
+     */
+    public byte[] retriveSingleSecretForCustomAnnotation(String key) throws ApiException {
+        if (conjurSecretUtils == null) {
+            initializeConjurSecretUtils();
+        }
+
+        try {
+            String account = ConjurConnectionManager.getAccount(secretsApi);
+            byte[] secret = conjurSecretUtils.fetchSecret(secretsApi, account, ConjurConstant.CONJUR_KIND, key);
+
+            if (secret == null) {
+                throw new ApiException(404, "Secret not found for key: " + key);
+            }
+
+            return secret;
+        } catch (ApiException e) {
+            LOGGER.error("Error fetching secret for key: {}", key, e);
+            throw e;
+        } catch (Exception e) {
+            LOGGER.error("Unexpected error fetching secret for key: {}", key, e);
+            throw new ApiException(500, "Unexpected error while fetching secret");
+        }
+    }
 }

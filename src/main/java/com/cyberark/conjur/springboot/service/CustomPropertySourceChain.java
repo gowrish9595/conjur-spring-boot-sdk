@@ -1,144 +1,115 @@
 package com.cyberark.conjur.springboot.service;
 
+
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.cyberark.conjur.sdk.ApiException;
 import com.cyberark.conjur.sdk.endpoint.SecretsApi;
 import com.cyberark.conjur.springboot.constant.ConjurConstant;
 import com.cyberark.conjur.springboot.core.env.ConjurConfig;
 import com.cyberark.conjur.springboot.core.env.ConjurConnectionManager;
+import com.cyberark.conjur.springboot.util.ConjurSecretUtils;
 import com.google.gson.Gson;
 
 /**
- * 
- * This custom class resolves the secret value at application load time from the
- * conjur vault.
- *
+ * Custom property source chain to fetch secrets from Conjur at app startup.
  */
-
 public class CustomPropertySourceChain extends PropertyProcessorChain {
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(CustomPropertySourceChain.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CustomPropertySourceChain.class);
 
-	private PropertyProcessorChain chain;
+    private PropertyProcessorChain chain;
+    private SecretsApi secretsApi;
+    
+    @Autowired
+    private ConjurConfig conjurConfig;
+    
+    private ConjurSecretUtils conjurSecretUtils;
+    
+    public CustomPropertySourceChain(String name) {
 
-	private SecretsApi secretsApi;
+        super("customPropertySource");
 
-	private ConjurConfig conjurConfig;
+    }
 
-	public CustomPropertySourceChain(String name) {
-		super("customPropertySource");
-		LOGGER.debug("Calling CustomPropertysource Chain ");
-	}
+    @Override
+    public void setNextChain(PropertyProcessorChain nextChain) {
+        this.chain = nextChain;
+    }
 
-	@Override
-	public void setNextChain(PropertyProcessorChain nextChain) {
-		this.chain = nextChain;
+    public void setSecretsApi(SecretsApi secretsApi) {
+        this.secretsApi = secretsApi;
+    }
 
-	}
+    public void setConjurConfig(ConjurConfig conjurConfig) {
+        this.conjurConfig = conjurConfig;
+    }
 
-	public void setSecretsApi(SecretsApi secretsApi) {
-		this.secretsApi = secretsApi;
-	}
+    @Override
+    public String[] getPropertyNames() {
+        return new String[0];
+    }
 
-	@Override
-	public String[] getPropertyNames() {
-		return new String[0];
-	}
+    @Override
+    public Object getProperty(String key) {
 
-	public void setConjurConfig(ConjurConfig conjurConfig) {
-		this.conjurConfig = conjurConfig;
-	}
+        if (skipConstantKey(key)) {
+            return null;
+        }
+        
+        boolean resilienceEnabled = false;
+        int maxAttempt =0;
+		Duration waitDuration;
 
-	@Override
-	public Object getProperty(String key) {
-		StringBuilder kind = new StringBuilder();
-		Gson gson = new Gson();
-		Object secretValue = null;
+        resilienceEnabled = conjurConfig.getResilienceEnabled();
+        maxAttempt = conjurConfig.getResilienceMaxAttempts();
+		waitDuration = conjurConfig.getResilienceWaitDuration();
 
-		List<Object> list = new ArrayList<Object>();
-		key = conjurConfig.mapProperty(key);
-		if (!(key.startsWith(ConjurConstant.SPRING_VAR)) && !(key.startsWith(ConjurConstant.SERVER_VAR))
-				&& !(key.startsWith(ConjurConstant.ERROR)) && !(key.startsWith(ConjurConstant.SPRING_UTIL))
-				&& !(key.startsWith(ConjurConstant.CONJUR_PREFIX)) && !(key.startsWith(ConjurConstant.ACTUATOR_PREFIX))
-				&& !(key.startsWith(ConjurConstant.LOGGING_PREFIX))
-				&& !(key.startsWith(ConjurConstant.KUBERNETES_PREFIX))) {
-			String account = ConjurConnectionManager.getAccount(secretsApi);
+    	conjurSecretUtils = ConjurSecretUtils.create(resilienceEnabled,maxAttempt,waitDuration);
 
-			/*
-			 * Included the below code for Bulk Retrieval using @Value annotation to check
-			 * if there are more than one key is being fetched using , separated value
-			 */
-			if (key.contains(",")) {
-				String[] keys = key.split(",");
-				String credentialId = "";
-				if (keys.length > 0) {
-					credentialId = conjurConfig.mapProperty(keys[0]);
-					kind.append(account + ":variable:" + credentialId);
-					for (int i = 1; i < keys.length; i++) {
-						credentialId = conjurConfig.mapProperty(keys[i]);
-						kind.append("," + account + ":variable:" + credentialId);
-					}
-				}
-				try {
-					secretValue = gson.toJson(secretsApi.getSecrets(new String(kind)), Object.class);
-					secretValue = processMultipleSecretResult(secretValue);
-				} catch (ApiException ex) {
-					if (ex.getCode() == 404 || ex.getMessage().equalsIgnoreCase("Not Found")) {
-						for (int i = 0; i < keys.length; i++) {
-							try {
-								credentialId = conjurConfig.mapProperty(keys[i]);
-								secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, credentialId);
-								if (secretValue != null) {
-									list.add(secretValue);
-								}
-							} catch (ApiException e) {
-								LOGGER.warn("Status code CustomPropery: " + ex.getCode());
-								LOGGER.warn("Reason: " + ex.getResponseBody());
-								LOGGER.warn(ex.getMessage());
-							}
-						}
-						secretValue = gson.toJson(list.toArray(new Object[list.size()]), Object.class);
-					}
-				}
-			} else {
-				try {
-					secretValue = secretsApi.getSecret(account, ConjurConstant.CONJUR_KIND, key);
-				} catch (ApiException ex) {
-					LOGGER.warn("Status code: " + ex.getCode());
-					LOGGER.warn("Reason: " + ex.getResponseBody());
-					LOGGER.warn(ex.getMessage());
-				}
-			}
+        String account = ConjurConnectionManager.getAccount(secretsApi);
 
-		}
+        Gson gson = new Gson();
 
-		return secretValue;
-	}
+        key = conjurConfig.mapProperty(key);
 
-	private String processMultipleSecretResult(Object result) {
-		String resultString = result.toString().replaceAll("^\\{|\\}$", "");
-		String[] pairs = resultString.split("\",\"");
-		StringBuilder sb = new StringBuilder();
-		for (int i = 0; i < pairs.length; i++) {
-			String[] parts = pairs[i].split("\":\"");
-			if (parts.length >= 2) {
-				String key = parts[0].replaceAll("^\"|\"$", "");
-				String value = parts[1].replaceAll("^\"|\"$", "");
-				String[] keyParts = key.split("/");
-				String finalKey = keyParts[keyParts.length - 1];
-				sb.append(finalKey).append("=").append(value);
-				if (i < pairs.length - 1) {
-					sb.append(",");
-				}
-			}
-		}
-		String finalResult = sb.toString();
-		return finalResult;
-	}
+        try {
+            if (key.contains(",")) {
+                // Bulk secret retrieval
+                String[] keys = key.split(",");
+                List<String> fullKeys = new ArrayList<>();
+                for (String rawKey : keys) {
+                    String mappedKey = conjurConfig.mapProperty(rawKey.trim());
+                    fullKeys.add(account + ":variable:" + mappedKey);
+                }
 
+                return conjurSecretUtils.fetchSecrets(secretsApi, String.join(",", fullKeys), gson);
+            } else {
+                // Single secret fetch
+                String mappedKey = conjurConfig.mapProperty(key);
+                return conjurSecretUtils.fetchSecret(secretsApi, account, ConjurConstant.CONJUR_KIND, mappedKey);
+            }
+        } catch (ApiException e) {
+            LOGGER.error("Error fetching secrets from Conjur", e);
+            throw new IllegalStateException("Failed to fetch secret(s) for key: " + key, e);
+        }
+    }
+
+    private boolean skipConstantKey(String key) {
+        return key.startsWith(ConjurConstant.SPRING_VAR)
+            || key.startsWith(ConjurConstant.SERVER_VAR)
+            || key.startsWith(ConjurConstant.ERROR)
+            || key.startsWith(ConjurConstant.SPRING_UTIL)
+            || key.startsWith(ConjurConstant.CONJUR_PREFIX)
+            || key.startsWith(ConjurConstant.ACTUATOR_PREFIX)
+            || key.startsWith(ConjurConstant.LOGGING_PREFIX)
+            || key.startsWith(ConjurConstant.KUBERNETES_PREFIX)
+            || key.contains(ConjurConstant.RESILIENCE_PREFIX);
+    }
 }
