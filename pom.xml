@@ -162,7 +162,7 @@
 		<dependency>
 			<groupId>com.cyberark</groupId>
 			<artifactId>conjur-sdk-java</artifactId>
-			<version>4.2.1-SNAPSHOT</version>
+			<version>4.2.1</version>
 		</dependency>
 
 		<dependency>
@@ -281,6 +281,32 @@
 					</execution>
 				</executions>
 			</plugin>
+			<plugin>
+		      <groupId>org.apache.maven.plugins</groupId>
+		      <artifactId>maven-resources-plugin</artifactId>
+		      <version>3.3.0</version>
+		      <executions>
+		        <execution>
+		          <id>copy-changelog-to-classes</id>
+		          <phase>process-resources</phase>
+		          <goals>
+		            <goal>copy-resources</goal>
+		          </goals>
+		          <configuration>
+		            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+		            <resources>
+		              <resource>
+		                <directory>${project.basedir}</directory>
+		                <includes>
+		                  <include>CHANGELOG.md</include>
+		                </includes>
+		                <filtering>false</filtering>
+		              </resource>
+		            </resources>
+		          </configuration>
+		        </execution>
+		      </executions>
+		    </plugin>
 		</plugins>
 	</build>
 	<reporting>
