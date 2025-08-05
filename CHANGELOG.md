@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## [2.2.1] - 2025-04-01
-- Updated telemetry headers
+## [2.2.1] - 2025-08-05
+
+### Changed
+- Retrieve SDK version from CHANGELOG instead of VERSION file (CNJR-10604)
 
 ## [2.2.0] - 2025-07-16
 - Added support to fail the microservice/application bootup in case of non-availability of secrets
