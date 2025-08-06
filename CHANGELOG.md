@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.2.2] - 2025-08-06
+
+### Changed
+- Updated 'conjur-sdk-java' dependency version to 4.2.2
+
 ## [2.2.1] - 2025-08-05
 
 ### Changed
