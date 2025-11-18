@@ -2,10 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
+The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.2.4] - 2025-11-18
+
+### Changed
+- Change codeowners to conjur-integrations
 
 ## [2.2.3] - 2025-10-16
 
@@ -31,11 +36,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [2.1.2] - 2024-07-26
 - Fix for downgrading the logging level from error to warn if no data found for variable
-- Fix for retrieving secrets with long key path in processMultipleSecretResult() for @ConjurValues (Bulk Retrieval) 
+- Fix for retrieving secrets with long key path in processMultipleSecretResult() for @ConjurValues (Bulk Retrieval)
 
 ## [2.1.1] - 2024-06-12
 - Fix for @ConjurValues annotation always returning null value.
-- Fix to scan only for Conjur related variables 
+- Fix to scan only for Conjur related variables
 - Mapping for external property files
 - Externalising the mapping properties file path as env or in property file
 
@@ -43,10 +48,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Security
 - Upgraded Spring Boot Starter Parent to 2.7.12 and Junit to 5.9.3
   [conjur-spring-boot-sdk#97](https://github.com/cyberark/conjur-spring-boot-sdk/pull/97)
-  
+
 ## [2.0.2] - 2023-07-24
 - Updated to support JDK version 1.8
-  
+
 ## [2.0.1] - 2023-07-19
 ### Added
 - Updated conjur-java-sdk to the version 4.1.0
