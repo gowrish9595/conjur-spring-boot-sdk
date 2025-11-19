@@ -34,6 +34,8 @@ if (params.MODE == "PROMOTE") {
       cp target/*.jar "${assetDirectory}"
     """
   }
+
+  release.copyEnterpriseRelease(params.VERSION_TO_PROMOTE)
   return
 }
 
