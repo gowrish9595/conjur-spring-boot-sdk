@@ -1,27 +1,8 @@
 # In all these entries, it's OK to leave all 3 groups listed regardless of which
 # org the new repo will be in. GitHub automatically applies the correct version.
 
-# Uncomment the appropriate team line to automatically tag the owning team on PRs
-# * @cyberark/community-and-integrations-team @conjurinc/community-and-integrations-team @conjurdemos/community-and-integrations-team
-
-# * @cyberark/conjur-core-team @conjurinc/conjur-core-team @conjurdemos/conjur-core-team
-
-# Changes to *.sh and *.yml files require Infrastructure team approval 
-*.sh and *.yml @cyberark/integrations-factory @Conjur-Enterprise/integrations-factory
-
-# Changes to Jenkinsfile require Infrastructure team approval
-Jenkinsfile @cyberark/integrations-factory @Conjur-Enterprise/integrations-factory
-
-#Changes to Dockerfiles require Infrastructure team approval
-Dockerfile @cyberark/integrations-factory @Conjur-Enterprise/integrations-factory
-
-#Changes to start require Infrastructure team approval
-start @cyberark/integrations-factory @Conjur-Enterprise/integrations-factory
-
-#Changes to stop require Infrastructure team approval
-stop @cyberark/integrations-factory @Conjur-Enterprise/integrations-factory
-
-
+# Owner team
+* @Conjur-Enterprise/conjur-integrations
 
 # Changes to .trivyignore require Security Architect approval
 .trivyignore @cyberark/security-architects @conjurinc/security-architects @conjurdemos/security-architects @conjur-enterprise/conjur-security
