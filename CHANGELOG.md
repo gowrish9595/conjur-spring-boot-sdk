@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.2.5] - 2025-11-18
+
+### Added
+- Added additional step for Copying Github Enterprise release to Github in the PROMOTE step of the Jenkins pipeline
+
 ## [2.2.4] - 2025-11-18
 
 ### Changed
