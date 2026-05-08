@@ -1,9 +1,10 @@
 # Conjur Spring Boot Plugin
 
-The Spring boot conjur sdk plugin provides client-side support for externalized configuration of secrets in a distributed system. The existing and new Spring Boot Applications can retrieve secrets from Conjur by adding the plugin as dependency.There are two ways to integrate the plugin:
+The Spring boot conjur sdk plugin provides client-side support for externalized configuration of secrets in a distributed system. The existing and new Spring Boot Applications can retrieve secrets from Conjur by adding the plugin as dependency. There are several ways to integrate the plugin:
 
-- With **minimal code** change by annotating existing or new POJO/Class with @ConjurPropertySource
-- With **no code** change.
+- With **minimal code** change by annotating existing or new POJO/Class with `@ConjurPropertySource`, `@ConjurValue`, or `@ConjurValues`.
+- With **no code** change, by setting `conjur.appliance-url` and letting the bundled `EnvironmentPostProcessor` auto-register a Conjur property source (Option 4 below).
+- With **no code** change, using `spring.config.import: conjur://policy/<path>` and Spring Boot's `ConfigData` API for explicit, per-import scoping (Option 5 below — recommended; mirrors Spring Cloud Vault / AWS Secrets Manager).
 
 The Authentication parameters to connect to Conjur Server can be configured either as the System Env variables(while using @ConjurPropertySource annotation) or through external property source [Spring Cloud Config Server](https://docs.spring.io/spring-cloud-config/docs/current/reference/html/).
 
@@ -427,10 +428,14 @@ If no other configuration is done (e.g. over system properties or CLI parameters
 
 ## Using the Conjur Spring Boot Plugin
 
-There are two ways to use the plugin.
+There are four ways to use the plugin:
 
-* @Value annotation and an optional conjur.properties file that enables the mapping of secret names.
-* @ConjurValue and @ConjurValues, which are Conjur native annotations (custom annotations) that enable individual and bulk secret retrieval.
+* `@Value` + `@ConjurPropertySource` annotation, optionally with a `conjur.properties` file for secret-name mapping.
+* `@ConjurValue` / `@ConjurValues` — Conjur native annotations for individual and bulk secret retrieval.
+* **Auto-registration** (zero code change) — set `conjur.appliance-url` and use plain `@Value("${...}") String` fields. The plugin's `EnvironmentPostProcessor` registers a Conjur property source automatically on startup.
+* **`spring.config.import`** (zero code change, recommended) — explicit per-import scoping via `spring.config.import: conjur://policy/my-application`, mirroring the Spring Cloud Vault / AWS Secrets Manager experience. Uses Spring Boot's `ConfigData` API.
+
+Options 3 and 4 return secrets as decoded `String`, so `@Value` can bind directly into `String` fields (no `byte[]` required).
 
 #### Option 1: Spring Standard @Value annotation
 
@@ -527,6 +532,73 @@ into your Spring Boot code allows you to retrieve a single secret from the Cyber
 		logger.info("By Using Standard Spring annotation -->  " + new String(pass3) + "  " );
 	
 	}}
+
+#### Option 4: Auto-registration (zero code change)
+
+The plugin ships an `EnvironmentPostProcessor` that registers a Conjur-backed
+`PropertySource` automatically when `conjur.appliance-url` is bound. No
+annotation is required, and `@Value` can bind into `String` fields directly.
+
+`application.yml`:
+
+----
+
+    conjur:
+      appliance-url: https://conjur.example.com
+      account: myorg
+      authn-login: host/myapp
+      authn-api-key: ${CONJUR_AUTHN_API_KEY}
+
+----
+
+Application code:
+
+----
+
+    @SpringBootApplication
+    public class App {
+        @Value("${database.password}")
+        private String password;       // String, not byte[]
+
+        public static void main(String[] args) {
+            SpringApplication.run(App.class, args);
+        }
+    }
+
+----
+
+The natural feature flag is `conjur.appliance-url` itself — if it is unset,
+the post-processor is skipped and apps that pull this JAR transitively are
+unaffected. Lookups for framework keys (`spring.*`, `server.*`, `logging.*`,
+`management.*`, `conjur.*`, etc.) are filtered out and never hit Conjur.
+
+#### Option 5: `spring.config.import: conjur://...` (recommended)
+
+Spring Boot 2.4+ `ConfigData` API. Each `import` entry is scoped to a vault
+path, supports the `optional:` prefix, and can vary per profile — exactly
+the experience Spring Cloud Vault and Spring Cloud AWS Secrets Manager
+expose today.
+
+`application.yml`:
+
+----
+
+    conjur:
+      appliance-url: https://conjur.example.com
+      account: myorg
+      authn-login: host/myapp
+      authn-api-key: ${CONJUR_AUTHN_API_KEY}
+
+    spring.config.import:
+      - conjur://policy/my-application
+      - optional:conjur://policy/cache
+
+----
+
+Application code is identical to Option 4: plain `@Value("${db.password}") String`.
+Each imported path is registered as a separate `PropertySource`, so the same
+key can be sourced from different policies in different profiles by varying
+the `spring.config.import` list.
 
 ## Contributing
 
