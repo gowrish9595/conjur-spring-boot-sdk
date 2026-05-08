@@ -72,6 +72,21 @@ public class ConjurConnectionManager implements EnvironmentAware, BeanFactoryPos
     }
   }
 
+  /**
+   * Bootstraps the global Conjur {@link ApiClient} from the given properties
+   * outside the Spring bean lifecycle. Used by
+   * {@code ConjurEnvironmentPostProcessor} and the {@code ConfigData} loader,
+   * which need a working Conjur connection before bean instantiation.
+   *
+   * @param conjurProperties the bound conjur.* properties
+   */
+  public static void bootstrapConnection(ConjurProperties conjurProperties) {
+    AccessTokenProvider provider = new AccessTokenProvider();
+    ConjurConnectionManager manager = new ConjurConnectionManager(provider);
+    manager.initializeResilientAuthenticator(conjurProperties);
+    manager.getConnection(conjurProperties);
+  }
+
   @Override
   public void setEnvironment(Environment environment) {
     this.environment = environment;

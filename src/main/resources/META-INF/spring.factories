@@ -1,2 +1,11 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
 com.cyberark.conjur.springboot.processor.SpringBootConjurAutoConfiguration
+
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.cyberark.conjur.springboot.bootstrap.ConjurEnvironmentPostProcessor
+
+org.springframework.boot.context.config.ConfigDataLocationResolver=\
+com.cyberark.conjur.springboot.config.ConjurConfigDataLocationResolver
+
+org.springframework.boot.context.config.ConfigDataLoader=\
+com.cyberark.conjur.springboot.config.ConjurConfigDataLoader

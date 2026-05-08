@@ -1,6 +1,7 @@
 package com.cyberark.conjur.springboot.core.env;
 
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,10 +19,22 @@ import com.cyberark.conjur.springboot.util.ConjurSecretUtils;
 import com.google.gson.Gson;
 
 /**
- * 
- * This class resolves the secret value for given vault path at application load
- * time from the Conjur vault.
  *
+ * Resolves secret values for a given vault path at application load time from
+ * the Conjur vault.
+ *
+ * <p>Two modes are supported:
+ * <ul>
+ *   <li><b>Annotation mode</b> (legacy): created by {@code Registrar} from a
+ *       {@code @ConjurPropertySource} annotation. The source only answers for
+ *       keys that appear as {@code @Value("${...}")} fields on the annotated
+ *       class, and returns {@code byte[]}.</li>
+ *   <li><b>Annotation-free mode</b>: created by
+ *       {@code ConjurEnvironmentPostProcessor} or the {@code ConfigData} API.
+ *       Answers any unresolved key (after framework-prefix filtering) and
+ *       returns a decoded UTF-8 {@code String} so {@code @Value} can bind to
+ *       {@code String} fields directly.</li>
+ * </ul>
  */
 public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 
@@ -38,11 +51,14 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 	private ConjurSecretUtils conjurSecretUtils;
 	private boolean resilienceEnabled = false;
 
+	private final boolean annotationFree;
+
 	private static final Logger LOGGER = LoggerFactory.getLogger(ConjurPropertySource.class);
 
 	public ConjurPropertySource(String vaultPath) {
 		super(vaultPath + "@");
 		this.vaultPath = vaultPath;
+		this.annotationFree = false;
 	}
 
 	public ConjurPropertySource(String vaultPath, String vaultInfo, AnnotationMetadata importingClassMetadata)
@@ -50,6 +66,7 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 		super(vaultPath + "@" + vaultInfo);
 		this.vaultPath = vaultPath;
 		this.vaultInfo = vaultInfo;
+		this.annotationFree = false;
 
 		List<String> properties = new ArrayList<>();
 		Class<?> annotatedClass = ClassUtils.forName((importingClassMetadata).getClassName(),
@@ -63,18 +80,53 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 		this.properties = properties;
 	}
 
+	/**
+	 * Annotation-free constructor used by the {@code EnvironmentPostProcessor}
+	 * and {@code ConfigData} integrations. The source answers for any
+	 * non-framework key, returning a decoded {@code String} value.
+	 */
+	public ConjurPropertySource(String name, String vaultPath, SecretsApi secretsApi, ConjurConfig conjurConfig) {
+		super(name);
+		this.vaultPath = vaultPath == null ? "" : vaultPath;
+		this.secretsApi = secretsApi;
+		this.conjurConfig = conjurConfig;
+		this.annotationFree = true;
+	}
+
 	@Override
 	public String[] getPropertyNames() {
 		return new String[0];
 	}
 
-	/**
-	 * Method which resolves @Value annotation queries and return result in the form
-	 * of byte array or String.
-	 */
 	@Override
 	public Object getProperty(String key) {
+		if (annotationFree) {
+			return resolveAnnotationFree(key);
+		}
+		return resolveLegacy(key);
+	}
 
+	private Object resolveAnnotationFree(String key) {
+		if (key == null || isFrameworkKey(key)) {
+			return null;
+		}
+		ensureSecretUtils();
+		try {
+			String account = ConjurConnectionManager.getAccount(secretsApi);
+			String mappedKey = conjurConfig.mapProperty(key);
+			String fullPath = normalizedVaultPath() + mappedKey;
+			byte[] secret = conjurSecretUtils.fetchSecret(secretsApi, account, ConjurConstant.CONJUR_KIND, fullPath);
+			if (secret == null) {
+				return null;
+			}
+			return new String(secret, StandardCharsets.UTF_8);
+		} catch (Exception e) {
+			LOGGER.debug("Conjur lookup failed for key '{}': {}", key, e.getMessage());
+			return null;
+		}
+	}
+
+	private Object resolveLegacy(String key) {
 		Gson gson = new Gson();
 		Object secretValue = null;
 
@@ -83,21 +135,13 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 		}
 
 		if (propertyExists(key)) {
-			int maxAttempt =0;
-			Duration waitDuration;
-
-			key = conjurConfig.mapProperty(key);
-			resilienceEnabled = conjurConfig.getResilienceEnabled();
-			maxAttempt = conjurConfig.getResilienceMaxAttempts();
-			waitDuration = conjurConfig.getResilienceWaitDuration();
-
-			conjurSecretUtils = ConjurSecretUtils.create(resilienceEnabled,maxAttempt,waitDuration);
+			ensureSecretUtils();
 
 			try {
 				String account = ConjurConnectionManager.getAccount(secretsApi);
+				key = conjurConfig.mapProperty(key);
 
 				if (key.contains(",")) {
-					// Bulk fetch multiple keys
 					String[] keys = key.split(",");
 					StringBuilder fullKeysBuilder = new StringBuilder();
 
@@ -112,7 +156,6 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 					}
 
 					secretValue = conjurSecretUtils.fetchSecrets(secretsApi, fullKeysBuilder.toString(), gson);
-
 				} else {
 					LOGGER.info("Calling single secret retrieval >>");
 					String fullPath = vaultPath + key;
@@ -129,11 +172,36 @@ public class ConjurPropertySource extends EnumerablePropertySource<Object> {
 		return secretValue;
 	}
 
+	private void ensureSecretUtils() {
+		int maxAttempt = conjurConfig.getResilienceMaxAttempts();
+		Duration waitDuration = conjurConfig.getResilienceWaitDuration();
+		resilienceEnabled = conjurConfig.getResilienceEnabled();
+		conjurSecretUtils = ConjurSecretUtils.create(resilienceEnabled, maxAttempt, waitDuration);
+	}
+
+	private String normalizedVaultPath() {
+		if (vaultPath == null || vaultPath.isEmpty()) {
+			return "";
+		}
+		return vaultPath.endsWith("/") ? vaultPath : vaultPath + "/";
+	}
+
 	/**
-	 * To set the secret api value
-	 * 
-	 * @param secretsApi
+	 * Mirrors {@code CustomPropertySourceChain.skipConstantKey}. Used so the
+	 * annotation-free source does not hit Conjur for framework keys.
 	 */
+	public static boolean isFrameworkKey(String key) {
+		return key.startsWith(ConjurConstant.SPRING_VAR)
+				|| key.startsWith(ConjurConstant.SERVER_VAR)
+				|| key.startsWith(ConjurConstant.ERROR)
+				|| key.startsWith(ConjurConstant.SPRING_UTIL)
+				|| key.startsWith(ConjurConstant.CONJUR_PREFIX)
+				|| key.startsWith(ConjurConstant.ACTUATOR_PREFIX)
+				|| key.startsWith(ConjurConstant.LOGGING_PREFIX)
+				|| key.startsWith(ConjurConstant.KUBERNETES_PREFIX)
+				|| key.contains(ConjurConstant.RESILIENCE_PREFIX);
+	}
+
 	public void setSecretsApi(SecretsApi secretsApi) {
 		this.secretsApi = secretsApi;
 	}

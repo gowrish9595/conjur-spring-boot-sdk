@@ -81,7 +81,13 @@ public class ConjurConfig implements EnvironmentAware, BeanFactoryPostProcessor 
     }
 
     public static void loadMappingProps(BindResult<ConjurProperties> result) {
-        String mappingPath = result.get().getMappingPath();
+        if (result.isBound()) {
+            loadMappingProps(result.get());
+        }
+    }
+
+    public static void loadMappingProps(ConjurProperties properties) {
+        String mappingPath = properties.getMappingPath();
         InputStream propsFile = null;
 
         if (mappingPath != null) {
@@ -109,11 +115,9 @@ public class ConjurConfig implements EnvironmentAware, BeanFactoryPostProcessor 
                 }
             }
         }
-        mapping = result.get().getMapping();
+        mapping = properties.getMapping();
         if (!CollectionUtils.isEmpty(mapping)) {
-            result.get().getMapping().forEach((key, value) -> {
-                PROPS.setProperty(ConjurConstant.CONJUR_MAPPING + key, value);
-            });
+            mapping.forEach((key, value) -> PROPS.setProperty(ConjurConstant.CONJUR_MAPPING + key, value));
         }
 
     }
@@ -238,6 +242,39 @@ public class ConjurConfig implements EnvironmentAware, BeanFactoryPostProcessor 
     private void initializeWaitDuration(BindResult<ConjurProperties> result) {
         resilienceWaitDuration = result.get().getResilienceWaitDuration();
 
+    }
+
+    /**
+     * Builds a fully-bootstrapped {@link ConjurConfig} from a bind result,
+     * outside the Spring bean lifecycle. Used by
+     * {@code ConjurEnvironmentPostProcessor}.
+     *
+     * @param result the bound conjur.* properties
+     * @return a configured ConjurConfig instance
+     */
+    public static ConjurConfig fromBindResult(BindResult<ConjurProperties> result) {
+        if (!result.isBound()) {
+            return new ConjurConfig();
+        }
+        return fromProperties(result.get());
+    }
+
+    /**
+     * Builds a fully-bootstrapped {@link ConjurConfig} from properties,
+     * outside the Spring bean lifecycle. Used by the {@code ConfigData}
+     * loader, which receives {@link ConjurProperties} from the bootstrap
+     * context.
+     *
+     * @param properties the conjur.* properties
+     * @return a configured ConjurConfig instance
+     */
+    public static ConjurConfig fromProperties(ConjurProperties properties) {
+        ConjurConfig config = new ConjurConfig();
+        loadMappingProps(properties);
+        config.resilienceEnabled = properties.getResilienceEnabled();
+        config.resilienceMaxAttempts = properties.getResilienceMaxAttempts();
+        config.resilienceWaitDuration = properties.getResilienceWaitDuration();
+        return config;
     }
 
 
