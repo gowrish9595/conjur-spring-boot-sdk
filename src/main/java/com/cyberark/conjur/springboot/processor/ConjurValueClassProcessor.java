@@ -7,7 +7,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.reflect.FieldUtils;

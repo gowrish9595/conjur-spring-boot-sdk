@@ -44,7 +44,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>2.7.18</version>
+		<version>4.0.3</version>
 	</parent>
 
 	<profiles>
@@ -145,20 +145,19 @@
   </profiles>
 
 	<properties>
-		<resilience4j.version>1.7.1</resilience4j.version>
+		<resilience4j.version>2.2.0</resilience4j.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<java.version>1.8</java.version>
-		<maven.compiler.source>1.8</maven.compiler.source>
-		<maven.compiler.target>1.8</maven.compiler.target>
+		<java.version>21</java.version>
+		<maven.compiler.source>21</maven.compiler.source>
+		<maven.compiler.target>21</maven.compiler.target>
 		<okhttp3.version>4.10.0</okhttp3.version>
-		<tomcat.version>9.0.104</tomcat.version>
 	</properties>
 
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
-			<version>2.7.18</version>
+			<version>4.0.3</version>
 		</dependency>
 
 		<dependency>
@@ -201,7 +200,7 @@
         
         <dependency>
 	        <groupId>io.github.resilience4j</groupId>
-	        <artifactId>resilience4j-spring-boot2</artifactId>
+	        <artifactId>resilience4j-spring-boot3</artifactId>
 	        <version>${resilience4j.version}</version>
 	    </dependency>
 	    <dependency>
@@ -242,8 +241,8 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.8.1</version>
 				<configuration>
-					<source>1.8</source>
-					<target>1.8</target>
+					<source>21</source>
+					<target>21</target>
 				  </configuration>
 				<dependencies>
 					<dependency>
